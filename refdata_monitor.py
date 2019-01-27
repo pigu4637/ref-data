@@ -1,3 +1,16 @@
+#!/usr/bin/env python3
+
+import datetime as dt
+import time
+import os
+
+import matplotlib
+matplotlib.use("TkAgg")
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+from matplotlib.figure import Figure
+from matplotlib import style
+style.use('ggplot')
+
 try:
     import Tkinter as tk
     import ttk
@@ -13,17 +26,7 @@ except ModuleNotFoundError:
     import tkinter.messagebox as tkMessageBox
     import tkinter.simpledialog as tkSimpleDialog
     from tkinter.simpledialog import Dialog
-import os as os
 
-import matplotlib
-matplotlib.use("TkAgg")
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-from matplotlib.figure import Figure
-from matplotlib import style
-style.use('ggplot')
-
-import datetime as dt
-import time
 #---------- Functions ----------
 
 #---------- Classes ----------
