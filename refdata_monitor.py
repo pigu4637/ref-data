@@ -3,6 +3,7 @@
 import datetime as dt
 import time
 import os
+import sys
 
 import matplotlib
 matplotlib.use("TkAgg")
@@ -178,16 +179,20 @@ class TestFrame():
         for i in range(1,11):
             self.mainframe.rowconfigure(i, weight=1)
 
-     #--- TESTS ---
-            # TODO
+    #--- TESTS ---
+    # TODO
     def serial_test(self):
         return 0
+
     def connect_test(self):
         return 0
+
     def ADC_test(self):
         return 0
+
     def DAC_test(self):
         return 0
+
     def temp_test(self):
         return 0
 
@@ -265,6 +270,10 @@ mf = MonitorFrame(root)
 print(dt.datetime.now())
 print(matplotlib.dates.date2num(dt.datetime.now()))
 
-root.mainloop()
+try:
+    root.mainloop()
+except KeyboardInterrupt:
+    sys.exit()
+
 # Main
 
