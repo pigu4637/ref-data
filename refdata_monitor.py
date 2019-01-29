@@ -1,17 +1,3 @@
-#!/usr/bin/env python3
-
-import datetime as dt
-import time
-import os
-import sys
-
-import matplotlib
-matplotlib.use("TkAgg")
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-from matplotlib.figure import Figure
-from matplotlib import style
-style.use('ggplot')
-
 try:
     import Tkinter as tk
     import ttk
@@ -27,7 +13,17 @@ except ModuleNotFoundError:
     import tkinter.messagebox as tkMessageBox
     import tkinter.simpledialog as tkSimpleDialog
     from tkinter.simpledialog import Dialog
+import os as os
 
+import matplotlib
+matplotlib.use("TkAgg")
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+from matplotlib.figure import Figure
+from matplotlib import style
+style.use('ggplot')
+
+import datetime as dt
+import time
 #---------- Functions ----------
 
 #---------- Classes ----------
@@ -62,7 +58,7 @@ class MonitorFrame():
         self.state2 = 0
         self.check1 = ttk.Button(self.controls, text = 'Test connection1', style = 'button.TButton', command=lambda : self.opentest(1))
         self.check2 = ttk.Button(self.controls, text = 'Test connection2', style = 'button.TButton', command=lambda : self.opentest(2))
-        self.logview = ttk.Button(self.controls, text = 'View Logs', style = 'button.TButton')
+        self.logview = ttk.Button(self.controls, text = 'View Logs', style = 'button.TButton',command=lambda : self.openlog())
         self.check1.place(height=58,width=200,x=500,y=10)
         self.check2.place(height=58,width=200,x=500,y=79)
         self.logview.place(height=58,width=200,x=500,y=217)
@@ -129,6 +125,17 @@ class MonitorFrame():
                 self.test_window2.resizable(width=False, height=False)
                 self.tframe2 = TestFrame(self.test_window2)
                 self.tframe2.runtest()
+                
+    def openlog(self):
+        try:
+            self.logwindow.lift()
+            self.logwindow.deiconify() 
+        except:
+            self.logwindow = tk.Toplevel(root)
+            self.logwindow.title('Error Log')
+            self.logwindow.geometry("500x600")
+            self.logwindow.resizable(width=False, height=False)
+            self.logframe = LogFrame(self.logwindow)
 
     def togglegraph(self,ind):
         if ind == 1:
@@ -170,33 +177,29 @@ class MonitorFrame():
         self.canvas2.draw()
         self.canvas2.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand = True)
             
-            
-
 class TestFrame():
     def __init__(self,parent):
         self.mainframe = ttk.Frame(parent, style = 'second.TFrame' )
         self.mainframe.place(height=310, width=280, x=10, y=10)
+        self.refreshbutton = ttk.Button(parent,style='button.TButton', text='Run Test', state = tk.DISABLED, command=lambda : self.runtest())
+        self.refreshbutton.place(height=60,width = 280,y=330,x=10)
         for i in range(1,11):
             self.mainframe.rowconfigure(i, weight=1)
 
-    #--- TESTS ---
-    # TODO
+            # TODO
     def serial_test(self):
         return 0
-
     def connect_test(self):
         return 0
-
     def ADC_test(self):
         return 0
-
     def DAC_test(self):
         return 0
-
     def temp_test(self):
         return 0
 
     def runtest(self):
+        self.refreshbutton.configure(state = tk.DISABLED)
         tk.Label(self.mainframe,text='Checking Monitor Serial Input...',font=('fixedsys',12),background='lightgrey').grid(column=0,row=1,stick='w')
         res = self.serial_test()
         if res == 1:
@@ -241,6 +244,15 @@ class TestFrame():
             tk.Label(self.mainframe,text='NO CONNECTION',font=('fixedsys',12),background='tomato').grid(column=0,row=10)
         else:
             tk.Label(self.mainframe,text='ERROR - CHECK LOGS',font=('fixedsys',12),background='lightgrey').grid(column=0,row=10)
+        self.refreshbutton.configure(state = 'normal')
+
+class LogFrame():
+    def __init__(self,parent):
+        self.mainframe = ttk.Frame(parent, style = 'second.TFrame' )
+        self.mainframe.place(height=580, width=480, x=10, y=10)
+        self.errorbox = tk.Text(self.mainframe,state=tk.DISABLED)
+        self.errorbox.place(height=570, width=470,x=5,y=5)
+        
 
 class ReceiveData():
     def __init__(self):
@@ -274,6 +286,4 @@ try:
     root.mainloop()
 except KeyboardInterrupt:
     sys.exit()
-
-# Main
 
