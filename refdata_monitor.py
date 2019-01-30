@@ -13,6 +13,9 @@ except ModuleNotFoundError:
     import tkinter.messagebox as tkMessageBox
     import tkinter.simpledialog as tkSimpleDialog
     from tkinter.simpledialog import Dialog
+
+import datetime as dt
+import time
 import os as os
 
 import matplotlib
@@ -22,8 +25,6 @@ from matplotlib.figure import Figure
 from matplotlib import style
 style.use('ggplot')
 
-import datetime as dt
-import time
 #---------- Functions ----------
 
 #---------- Classes ----------
@@ -246,6 +247,7 @@ class TestFrame():
             tk.Label(self.mainframe,text='ERROR - CHECK LOGS',font=('fixedsys',12),background='lightgrey').grid(column=0,row=10)
         self.refreshbutton.configure(state = 'normal')
 
+
 class LogFrame():
     def __init__(self,parent):
         self.mainframe = ttk.Frame(parent, style = 'second.TFrame' )
@@ -279,8 +281,8 @@ s.configure('on.TFrame',background='green3',relief='raised')
 # Frame creations
 mf = MonitorFrame(root)
 
-print(dt.datetime.now())
-print(matplotlib.dates.date2num(dt.datetime.now()))
+# print(dt.datetime.now())
+# print(matplotlib.dates.date2num(dt.datetime.now()))
 
 try:
     root.mainloop()
