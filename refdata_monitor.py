@@ -1,3 +1,5 @@
+# --- Imports ---
+# Tkinter
 try:
     import Tkinter as tk
     import ttk
@@ -13,11 +15,17 @@ except ModuleNotFoundError:
     import tkinter.messagebox as tkMessageBox
     import tkinter.simpledialog as tkSimpleDialog
     from tkinter.simpledialog import Dialog
-
-import datetime as dt
-import time
+    
+# OS
 import os as os
 
+# pySerial
+import serial
+
+#Threading
+import threading
+
+# Matplotlib
 import matplotlib
 matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
@@ -25,10 +33,41 @@ from matplotlib.figure import Figure
 from matplotlib import style
 style.use('ggplot')
 
-#---------- Functions ----------
+# DateTime
+import datetime as dt
 
-#---------- Classes ----------
-    
+# Time
+import time
+
+# -- Threads ---
+
+# Serial listenner
+def seriallisten():
+    global b1_rec
+    n = 0
+    while 1:
+        if serial1.isOpen() == True:
+            try:
+                n += 1
+                ini_input1 = ''
+                if serial1.inWaiting() > 0:
+                    ini_input1_raw = serial1.readline()
+                    ini_input1 = ini_input1_raw.decode('utf-8')
+                if n == 100000:
+                    #b1_rec = False
+                    ser_output = 'b' + '1' + '\n'
+                    serial1.write(ser_output.encode('ascii'))
+                    n = 0
+                    b1_rec = False
+                if ini_input1 == 'b1c\n':
+                    b1_rec = True
+            except:
+                ...
+
+# --- Classes ---
+
+# MonitorFrame
+    # Main GUI window, handles graphs, controls, table, save options
 class MonitorFrame():
     def __init__(self,parent):
         self.mainframe = ttk.Frame(parent, style = 'main.TFrame' )
@@ -59,7 +98,7 @@ class MonitorFrame():
         self.state2 = 0
         self.check1 = ttk.Button(self.controls, text = 'Test connection1', style = 'button.TButton', command=lambda : self.opentest(1))
         self.check2 = ttk.Button(self.controls, text = 'Test connection2', style = 'button.TButton', command=lambda : self.opentest(2))
-        self.logview = ttk.Button(self.controls, text = 'View Logs', style = 'button.TButton',command=lambda : self.openlog())
+        self.logview = ttk.Button(self.controls, text = 'View Logs', style = 'button.TButton', command=lambda : self.openlog())
         self.check1.place(height=58,width=200,x=500,y=10)
         self.check2.place(height=58,width=200,x=500,y=79)
         self.logview.place(height=58,width=200,x=500,y=217)
@@ -113,8 +152,8 @@ class MonitorFrame():
                 self.test_window1.title('Connection Test (1)')
                 self.test_window1.geometry("300x400")
                 self.test_window1.resizable(width=False, height=False)
-                self.tframe1 = TestFrame(self.test_window1)
-                self.tframe1.runtest()
+                self.tframe1 = TestFrame(self.test_window1,1)
+                self.tframe1.runtest(ind)
         elif ind == 2:
             try:
                 self.test_window2.lift()
@@ -124,8 +163,8 @@ class MonitorFrame():
                 self.test_window2.title('Connection Test (2)')
                 self.test_window2.geometry("300x400")
                 self.test_window2.resizable(width=False, height=False)
-                self.tframe2 = TestFrame(self.test_window2)
-                self.tframe2.runtest()
+                self.tframe2 = TestFrame(self.test_window2,2)
+                self.tframe2.runtest(ind)
                 
     def openlog(self):
         try:
@@ -141,11 +180,16 @@ class MonitorFrame():
     def togglegraph(self,ind):
         if ind == 1:
             if self.state1 == 1:
+                serial1.close()
                 self.data1_status.configure(style='off.TFrame')
                 self.state1 = 0
             else:
-                self.data1_status.configure(style='on.TFrame')
-                self.state1 = 1
+                try:
+                    serial1.open()
+                    self.data1_status.configure(style='on.TFrame')
+                    self.state1 = 1
+                except:
+                    self.data1_status.configure(style='error.TFrame')
         elif ind == 2:
             if self.state2 == 1:
                 self.data2_status.configure(style='off.TFrame')
@@ -179,30 +223,61 @@ class MonitorFrame():
         self.canvas2.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand = True)
             
 class TestFrame():
-    def __init__(self,parent):
+    def __init__(self,parent,ind):
+        self.par = parent
         self.mainframe = ttk.Frame(parent, style = 'second.TFrame' )
         self.mainframe.place(height=310, width=280, x=10, y=10)
-        self.refreshbutton = ttk.Button(parent,style='button.TButton', text='Run Test', state = tk.DISABLED, command=lambda : self.runtest())
+        self.refreshbutton = ttk.Button(parent,style='button.TButton', text='Run Test', state = tk.DISABLED, command=lambda : self.runtest(ind))
         self.refreshbutton.place(height=60,width = 280,y=330,x=10)
-        for i in range(1,11):
-            self.mainframe.rowconfigure(i, weight=1)
 
             # TODO
-    def serial_test(self):
+    def serial_test(self,ind):
+        if ind == 1:
+            try:
+                if serial1.isOpen():
+                    return 1
+                else:
+                    return 0
+            except:
+                return -1
+        else:
+            return 0
+        
+    def connect_test(self,ind):
+        if ind == 1:
+            try:
+                if serial1.isOpen():
+                    if b1_rec == True:
+                        return 1
+                    else:
+                        return 0
+                else:
+                    return 0
+            except:
+                return -1
+        else:
+            return 0
+        
+    def ADC_test(self,ind):
         return 0
-    def connect_test(self):
+    def DAC_test(self,ind):
         return 0
-    def ADC_test(self):
-        return 0
-    def DAC_test(self):
-        return 0
-    def temp_test(self):
+    def temp_test(self,ind):
         return 0
 
-    def runtest(self):
+    def runtest(self,ind):
+        try:
+            self.mainframe.destroy()
+        except:
+            ...
+        self.mainframe = ttk.Frame(self.par, style = 'second.TFrame' )
+        self.mainframe.place(height=310, width=280, x=10, y=10)
+        for i in range(1,11):
+            self.mainframe.rowconfigure(i, weight=1)
+        
         self.refreshbutton.configure(state = tk.DISABLED)
         tk.Label(self.mainframe,text='Checking Monitor Serial Input...',font=('fixedsys',12),background='lightgrey').grid(column=0,row=1,stick='w')
-        res = self.serial_test()
+        res = self.serial_test(ind)
         if res == 1:
             tk.Label(self.mainframe,text='GOOD CONNECTION',font=('fixedsys',12),background='green3').grid(column=0,row=2)
         elif res == 0:
@@ -211,7 +286,7 @@ class TestFrame():
             tk.Label(self.mainframe,text='ERROR - CHECK LOGS',font=('fixedsys',12),background='lightgrey').grid(column=0,row=2)
             
         tk.Label(self.mainframe,text='Checking Monitor Connection...',font=('fixedsys',12),background='lightgrey').grid(column=0,row=3,stick='w')
-        res = self.connect_test()
+        res = self.connect_test(ind)
         if res == 1:
             tk.Label(self.mainframe,text='GOOD CONNECTION',font=('fixedsys',12),background='green3').grid(column=0,row=4)
         elif res == 0:
@@ -220,7 +295,7 @@ class TestFrame():
             tk.Label(self.mainframe,text='ERROR - CHECK LOGS',font=('fixedsys',12),background='lightgrey').grid(column=0,row=4)
 
         tk.Label(self.mainframe,text='Checking MCU Input Connections...',font=('fixedsys',12),background='lightgrey').grid(column=0,row=5,stick='w')
-        res = self.ADC_test()
+        res = self.ADC_test(ind)
         if res == 1:
             tk.Label(self.mainframe,text='GOOD CONNECTION',font=('fixedsys',12),background='green3').grid(column=0,row=6)
         elif res == 0:
@@ -229,7 +304,7 @@ class TestFrame():
             tk.Label(self.mainframe,text='ERROR - CHECK LOGS',font=('fixedsys',12),background='lightgrey').grid(column=0,row=6)
 
         tk.Label(self.mainframe,text='Checking MCU Output Connections...',font=('fixedsys',12),background='lightgrey').grid(column=0,row=7,stick='w')
-        res = self.DAC_test()
+        res = self.DAC_test(ind)
         if res == 1:
             tk.Label(self.mainframe,text='GOOD CONNECTION',font=('fixedsys',12),background='green3').grid(column=0,row=8)
         elif res == 0:
@@ -238,7 +313,7 @@ class TestFrame():
             tk.Label(self.mainframe,text='ERROR - CHECK LOGS',font=('fixedsys',12),background='lightgrey').grid(column=0,row=8)
 
         tk.Label(self.mainframe,text='Checking overall system...',font=('fixedsys',12),background='lightgrey').grid(column=0,row=9,stick='w')
-        res = self.temp_test()
+        res = self.temp_test(ind)
         if res == 1:
             tk.Label(self.mainframe,text='GOOD CONNECTION',font=('fixedsys',12),background='green3').grid(column=0,row=10)
         elif res == 0:
@@ -247,18 +322,16 @@ class TestFrame():
             tk.Label(self.mainframe,text='ERROR - CHECK LOGS',font=('fixedsys',12),background='lightgrey').grid(column=0,row=10)
         self.refreshbutton.configure(state = 'normal')
 
-
 class LogFrame():
     def __init__(self,parent):
         self.mainframe = ttk.Frame(parent, style = 'second.TFrame' )
         self.mainframe.place(height=580, width=480, x=10, y=10)
         self.errorbox = tk.Text(self.mainframe,state=tk.DISABLED)
         self.errorbox.place(height=570, width=470,x=5,y=5)
-        
 
 class ReceiveData():
     def __init__(self):
-        self.rec_data1 = [[0],[0]]
+        self.rec_data1 = [[0,1,2,3,4,5],[1,1,24,5,6,6]]
         self.rec_data2 = [[0],[0]]
 
 # Main Window
@@ -277,15 +350,25 @@ s.configure('controls.TFrame',background = 'lightgrey')
 s.configure('button.TButton',background = 'darkgrey',relief='raised')
 s.configure('off.TFrame',background='brown2',relief='raised')
 s.configure('on.TFrame',background='green3',relief='raised')
+s.configure('error.TFrame',background='orange',relief='raised')
 
 # Frame creations
 mf = MonitorFrame(root)
 
-# print(dt.datetime.now())
-# print(matplotlib.dates.date2num(dt.datetime.now()))
+# Serial ports
 
-try:
-    root.mainloop()
-except KeyboardInterrupt:
-    sys.exit()
+serial1 = serial.Serial(timeout=1,parity=serial.PARITY_NONE,stopbits=serial.STOPBITS_ONE,bytesize=serial.EIGHTBITS)
+serial1.baudrate = 9600
+serial1.port = 'COM3'
+print('Port ' + serial1.name + ' used.')
+
+
+#------
+print(dt.datetime.now())
+#print(matplotlib.dates.date2num(dt.datetime.now()))
+
+
+b1_rec = False
+thr = threading.Thread(target=seriallisten)
+thr.start()
 
