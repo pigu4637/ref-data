@@ -6,6 +6,8 @@ String outputString = "";
 
 const int adc_address[5] = {0x1D, 0x1E, 0x35, 0x2D, 0x2E};
 const int adc_channel[8] = {0x20,0x21,0x22,0x23,0x24,0x25,0x26,0x27};
+const int adc_limit_high[8] = {0x2A,0x2C,0x2E,0x30,0x32,0x34,0x36,0x38};
+const int adc_limit_low[8] = {0x2B,0x2D,0x2F,0x31,0x33,0x35,0x37,0x39};
 
 const int adc_config = B00001001; // Turn on ADC, clear interrupt
 const int adv_adc_config = B00000011; // Mode select 1 (8 channels), external VRef
@@ -36,8 +38,24 @@ void setup() {
     Wire.beginTransmission(adc_address[i]);
     Wire.write(0x0B);
     Wire.write(adv_adc_config);
+    Wire.endTransmission();
+    Wire.beginTransmission(adc_address[i]);
     Wire.write(0x07);
     Wire.write(conv_rate);
+    Wire.endTransmission();
+    for(int j = 0; j < 8; j++) {
+      Wire.beginTransmission(adc_address[i]);
+      Wire.write(adc_limit_high[j]);
+      Wire.write(0xFA);
+      Wire.endTransmission();
+      
+      Wire.beginTransmission(adc_address[i]);
+      Wire.write(adc_limit_low[j]);
+      Wire.write(0xB0);
+      Wire.endTransmission();
+    }
+    
+    Wire.beginTransmission(adc_address[i]);
     Wire.write(0x00);
     Wire.write(adc_config);
     Wire.endTransmission();
@@ -70,19 +88,17 @@ void serialEvent() {
 
 void ADC_getdata() {
   for (int i = 0; i < 5; i++) {
-    Wire.beginTransmission(adc_address[i]);
     for(int j = 0; j < 8; j++) {
+     Wire.beginTransmission(adc_address[i]);
      Wire.write(adc_channel[j]);
+     Wire.endTransmission();
      Wire.requestFrom(adc_address[i],2);
-     adc_data[8*i+j] = Wire.read() & 4095;
-     Serial.write(i+48+1);
-     Serial.write(' ');
-     Serial.write(j+48);
-     Serial.write(' ');
-     Serial.write(adc_data[8*i+j]+48);
+     int highByte_read = Wire.read() & 15;
+     int lowByte_read = Wire.read();
+     adc_data[8*i+j] = (highByte_read << 8) | lowByte_read;
+     Serial.print(adc_data[8*i+j]);
      Serial.write('\n');
     }
-    Wire.endTransmission();
     delay(1000);
   }
 }
