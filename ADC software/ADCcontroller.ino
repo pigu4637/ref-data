@@ -9,11 +9,11 @@ const int adc_channel[8] = {0x20,0x21,0x22,0x23,0x24,0x25,0x26,0x27};
 const int adc_limit_high[8] = {0x2A,0x2C,0x2E,0x30,0x32,0x34,0x36,0x38};
 const int adc_limit_low[8] = {0x2B,0x2D,0x2F,0x31,0x33,0x35,0x37,0x39};
 
-const int adc_config = B00001001; // Turn on ADC, clear interrupt
+const int adc_config = B00000001; // Turn on ADC
 const int adv_adc_config = B00000011; // Mode select 1 (8 channels), external VRef
 const int conv_rate = B00000001; // Continuous conversion mode
 
-unsigned int adc_data[40];
+signed int adc_data[40];
 // 8*n + i | n - 0:4 | i - 0:7 
 
 void setup() {
@@ -88,6 +88,10 @@ void serialEvent() {
 
 void ADC_getdata() {
   for (int i = 0; i < 5; i++) {
+    Serial.write('-');
+    Serial.write(i+49);
+    Serial.write('-');
+    Serial.write('\n');
     for(int j = 0; j < 8; j++) {
      Wire.beginTransmission(adc_address[i]);
      Wire.write(adc_channel[j]);
