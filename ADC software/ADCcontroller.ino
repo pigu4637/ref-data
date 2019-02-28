@@ -16,6 +16,8 @@ const int conv_rate = B00000001; // Continuous conversion mode
 signed int adc_data[40];
 // 8*n + i | n - 0:4 | i - 0:7 
 
+long int count = 0;
+
 void setup() {
   Wire.begin();
   Serial.begin(9600, SERIAL_8N1);
@@ -65,15 +67,71 @@ void setup() {
 void loop() {
   if (stringComplete) {
     outputString = inputString;
-    String temp = "b1\n";
-    if(outputString == temp) {
+    String temp[2] = {"b1\n", "dreq\n"};
+    if(outputString == temp[0]) {
       char ser_output[4] = {'b','1','c','\n'};
       Serial.write(ser_output);
+    }
+    else if(outputString == temp[1]) {
+      String temp_output;
+      char ser_output_2[5] = {'b','e','g','d','\n'};
+      Serial.write(ser_output_2);
+      for (int i = 0; i < 40; i++){
+        temp_output = String(adc_data[i]);
+        switch(temp_output.length()){
+          case 4:
+            ser_output_2[0] = temp_output[0];
+            ser_output_2[1] = temp_output[1];
+            ser_output_2[2] = temp_output[2];
+            ser_output_2[3] = temp_output[3];
+            ser_output_2[4] = '\n';
+            break;
+          case 3:
+            ser_output_2[0] = '0';
+            ser_output_2[1] = temp_output[0];
+            ser_output_2[2] = temp_output[1];
+            ser_output_2[3] = temp_output[2];
+            ser_output_2[4] = '\n';
+            break;
+          case 2:
+            ser_output_2[0] = '0';
+            ser_output_2[1] = '0';
+            ser_output_2[2] = temp_output[0];
+            ser_output_2[3] = temp_output[1];
+            ser_output_2[4] = '\n';
+            break;
+          case 1:
+            ser_output_2[0] = '0';
+            ser_output_2[1] = '0';
+            ser_output_2[2] = '0';
+            ser_output_2[3] = temp_output[0];
+            ser_output_2[4] = '\n';
+            break;
+          default:
+            ser_output_2[0] = 'e';
+            ser_output_2[1] = 'r';
+            ser_output_2[2] = 'r';
+            ser_output_2[3] = '2';
+            ser_output_2[4] = '\n';
+            break;
+        }
+        Serial.write(ser_output_2);
+      }
+      ser_output_2[0] = 'e';
+      ser_output_2[1] = 'n';
+      ser_output_2[2] = 'd';
+      ser_output_2[3] = 'd';
+      ser_output_2[4] = '\n';
+      Serial.write(ser_output_2);
     }
     inputString = "";
     stringComplete = false;
   }
-  ADC_getdata();
+  if(count == 500000) {
+    ADC_getdata();
+    count = 0;
+  }
+  count++;
 }
 
 void serialEvent() {
@@ -88,21 +146,16 @@ void serialEvent() {
 
 void ADC_getdata() {
   for (int i = 0; i < 5; i++) {
-    Serial.write('-');
-    Serial.write(i+49);
-    Serial.write('-');
-    Serial.write('\n');
     for(int j = 0; j < 8; j++) {
      Wire.beginTransmission(adc_address[i]);
      Wire.write(adc_channel[j]);
      Wire.endTransmission();
      Wire.requestFrom(adc_address[i],2);
-     int highByte_read = Wire.read() & 15;
-     int lowByte_read = Wire.read();
-     adc_data[8*i+j] = (highByte_read << 8) | lowByte_read;
-     Serial.print(adc_data[8*i+j]);
-     Serial.write('\n');
+     int highByte_read = Wire.read();
+     int lowByte_read = Wire.read() & 240;
+     adc_data[8*i+j] = (highByte_read << 4) | (lowByte_read >> 4);
+     //Serial.print(18000/(3.3/(3.3*adc_data[8*i+j]/4095)-1));
+     //Serial.write('\n');
     }
-    delay(1000);
   }
 }
