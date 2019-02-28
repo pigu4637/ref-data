@@ -39,12 +39,32 @@ import datetime as dt
 # Time
 import time
 
+# -- Global variables --
+serial_data1 = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+b1_rec = False
+
 # -- Threads ---
 
 # Serial listenner
 def seriallisten():
     global b1_rec
+    global serial_data1
+    global update1
     n = 0
+    rec_data_status = 0
+    rec_ind = 0
+    rec_data = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+    conc_rec_data = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+    closest_temp_array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                          0,0,0,0,0,0,0,0,0,0]
+    res_to_temp = [190953, 145953, 112440, 87285, 68260, 53762,
+                   42636, 34038, 27348, 22108, 17979, 14706, 12094,
+                   10000, 8310.8, 6941.1, 5824.9, 4910.6, 4158.3,
+                   3536.2, 3019.7, 2588.8, 2228.0, 1924.6, 1668.4,
+                   1451.3, 1266.7, 1109.2, 974.26, 858.33]
+    
     while 1:
         if serial1.isOpen() == True:
             try:
@@ -53,14 +73,45 @@ def seriallisten():
                 if serial1.inWaiting() > 0:
                     ini_input1_raw = serial1.readline()
                     ini_input1 = ini_input1_raw.decode('utf-8')
-                if n == 100000:
-                    #b1_rec = False
+                if n == 200000 and rec_data_status == 0:
                     ser_output = 'b' + '1' + '\n'
                     serial1.write(ser_output.encode('ascii'))
                     n = 0
                     b1_rec = False
+                if n == 100000:
+                    rec_data_status = 0
+                    ser_output = 'd' + 'r' + 'e' + 'q' + '\n'
+                    serial1.write(ser_output.encode('ascii'))
+                if rec_data_status == 1 and ini_input1 != 'endd\n' and ini_input1 != '':
+                    rec_data[rec_ind] = ini_input1
+                    rec_ind += 1
                 if ini_input1 == 'b1c\n':
                     b1_rec = True
+                elif ini_input1 == 'begd\n':
+                    rec_data_status = 1
+                    rec_ind = 0
+                elif ini_input1 == 'endd\n':
+                    rec_data_status = 0
+                    for i in range(0,40):
+                        data_temp = rec_data[i]
+                        data_temp_2 = [0,0,0,0]
+                        for j in range(0,4):
+                            data_temp_2[j] = data_temp[j]
+                        if int(''.join(data_temp_2)) != 0:
+                            # Convert to resistance, then to temperature
+                            conc_rec_data[i] = round(18000/(3.3/(3.3*int(''.join(data_temp_2))/4095)-1))
+                            serial_data1[i] = 0
+                            #print(i)
+                            #print(conc_rec_data[i])
+                            if conc_rec_data[i] < 190953:
+                                closest_temp_array[:] = [abs(conc_rec_data[i]-m) for m in res_to_temp]
+                                closest_temp_ind = closest_temp_array.index(min(closest_temp_array))
+                                if conc_rec_data[i] < res_to_temp[closest_temp_ind]:
+                                    closest_temp_ind += 1
+                                resulting_temp = (-40+5*(closest_temp_ind))-5*((conc_rec_data[i]-res_to_temp[closest_temp_ind])/(res_to_temp[closest_temp_ind-1]-res_to_temp[closest_temp_ind]))
+                                serial_data1[i] = abs(round(resulting_temp,2))
+                            #print(serial_data1[i])
+
             except:
                 ...
 
@@ -142,6 +193,13 @@ class MonitorFrame():
         ttk.Separator(self.datatable, orient=tk.HORIZONTAL).grid(column = 1, row=1, columnspan=73,sticky='we')
         ttk.Separator(self.datatable, orient=tk.HORIZONTAL).grid(column = 1, row=3, columnspan=73,sticky='we')
 
+    def update_table(self):
+        for i in range(1,37):
+            tk.Label(self.datatable,text=i,font=('verdana',12)).grid(column=i*2+1,row=0)
+            tk.Label(self.datatable,text=str(serial_data1[i]),font=('verdana',8)).grid(column=i*2+1,row=2)
+            tk.Label(self.datatable,text='00.0',font=('verdana',8)).grid(column=i*2+1,row=4)
+        print('table')
+    
     def opentest(self,ind):
         if ind == 1:
             try:
@@ -258,9 +316,9 @@ class TestFrame():
         else:
             return 0
         
-    def ADC_test(self,ind):
+    def write_test(self,ind):
         return 0
-    def DAC_test(self,ind):
+    def read_test(self,ind):
         return 0
     def temp_test(self,ind):
         return 0
@@ -295,7 +353,7 @@ class TestFrame():
             tk.Label(self.mainframe,text='ERROR - CHECK LOGS',font=('fixedsys',12),background='lightgrey').grid(column=0,row=4)
 
         tk.Label(self.mainframe,text='Checking MCU Input Connections...',font=('fixedsys',12),background='lightgrey').grid(column=0,row=5,stick='w')
-        res = self.ADC_test(ind)
+        res = self.write_test(ind)
         if res == 1:
             tk.Label(self.mainframe,text='GOOD CONNECTION',font=('fixedsys',12),background='green3').grid(column=0,row=6)
         elif res == 0:
@@ -304,7 +362,7 @@ class TestFrame():
             tk.Label(self.mainframe,text='ERROR - CHECK LOGS',font=('fixedsys',12),background='lightgrey').grid(column=0,row=6)
 
         tk.Label(self.mainframe,text='Checking MCU Output Connections...',font=('fixedsys',12),background='lightgrey').grid(column=0,row=7,stick='w')
-        res = self.DAC_test(ind)
+        res = self.read_test(ind)
         if res == 1:
             tk.Label(self.mainframe,text='GOOD CONNECTION',font=('fixedsys',12),background='green3').grid(column=0,row=8)
         elif res == 0:
@@ -312,7 +370,7 @@ class TestFrame():
         else:
             tk.Label(self.mainframe,text='ERROR - CHECK LOGS',font=('fixedsys',12),background='lightgrey').grid(column=0,row=8)
 
-        tk.Label(self.mainframe,text='Checking overall system...',font=('fixedsys',12),background='lightgrey').grid(column=0,row=9,stick='w')
+        tk.Label(self.mainframe,text='Checking wired connections...',font=('fixedsys',12),background='lightgrey').grid(column=0,row=9,stick='w')
         res = self.temp_test(ind)
         if res == 1:
             tk.Label(self.mainframe,text='GOOD CONNECTION',font=('fixedsys',12),background='green3').grid(column=0,row=10)
@@ -331,9 +389,25 @@ class LogFrame():
 
 class ReceiveData():
     def __init__(self):
-        self.rec_data1 = [[0,1,2,3,4,5],[1,1,24,5,6,6]]
-        self.rec_data2 = [[0],[0]]
-
+        self.rec_data1 = [[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+                          [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]]
+        self.rec_data2 = [[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+                          [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]]
+        self.old_serial_data1 = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+        self.time_ind = 0
+    def updateAll(self):
+        #if sum(serial_data1) != sum(self.old_serial_data1):
+            #print('b')
+        self.old_serial_data1 = serial_data1
+        mf.update_table()
+        for i in range(0,36):
+            print(i)
+            self.rec_data1[i][0] = serial_data1[i]
+            self.rec_data1[i][1] = self.time_ind
+        mf.updategraphs()
+        self.time_ind += 1
+        root.after(1000,self.updateAll)
+            
 # Main Window
 root = tk.Tk()
 root.geometry("1600x900")
@@ -367,8 +441,9 @@ print('Port ' + serial1.name + ' used.')
 print(dt.datetime.now())
 #print(matplotlib.dates.date2num(dt.datetime.now()))
 
-
-b1_rec = False
 thr = threading.Thread(target=seriallisten)
 thr.start()
 
+root.after(5000,mf.rd.updateAll)
+
+root.mainloop()
