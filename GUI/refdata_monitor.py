@@ -15,7 +15,12 @@ except ModuleNotFoundError:
     import tkinter.messagebox as tkMessageBox
     import tkinter.simpledialog as tkSimpleDialog
     from tkinter.simpledialog import Dialog
-    
+    from tkinter.scrolledtext import ScrolledText
+from tkintertable import TableCanvas, TableModel
+
+# Numpy
+import numpy as np
+
 # OS
 import os as os
 
@@ -40,8 +45,17 @@ import datetime as dt
 import time
 
 # -- Global variables --
-serial_data1 = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+serial_data1 = [00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,
+                00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0]
+serial_data2 = [00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,
+                00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0]
+data_template =['  1','  2','  3','  4','  5','  6','  7','  8','  9',' 10',' 11',' 12',' 13',' 14',' 15',' 16',
+                ' 17',' 18',' 19',' 20',' 21',' 22',' 23',' 24',' 25',' 26',' 27',' 28',' 29',' 30',' 31',' 32',
+                ' 33',' 34',' 35',' 36']
 b1_rec = False
+heat1 = 0
+heat2 = 0
+errorlist = []
 
 # -- Threads ---
 
@@ -50,6 +64,7 @@ def seriallisten():
     global b1_rec
     global serial_data1
     global update1
+    global errorlist
     n = 0
     rec_data_status = 0
     rec_ind = 0
@@ -112,8 +127,8 @@ def seriallisten():
                                 serial_data1[i] = abs(round(resulting_temp,2))
                             #print(serial_data1[i])
 
-            except:
-                ...
+            except Exception as e:
+                errorlist.append(e)
 
 # --- Classes ---
 
@@ -129,8 +144,6 @@ class MonitorFrame():
         self.graph2 = ttk.Frame(self.mainframe,style = 'graph.TFrame')
         self.graph2.place(height=400, width=715, x=763, y=10)
         
-        self.datatable = ttk.Frame(self.mainframe,style = 'table.TFrame')
-        self.datatable.place(height=125, width=1450, x=25, y=420)
         self.initialize_table()
         
         self.controls = ttk.Frame(self.mainframe,style = 'controls.TFrame')
@@ -149,7 +162,7 @@ class MonitorFrame():
         self.state2 = 0
         self.check1 = ttk.Button(self.controls, text = 'Test connection1', style = 'button.TButton', command=lambda : self.opentest(1))
         self.check2 = ttk.Button(self.controls, text = 'Test connection2', style = 'button.TButton', command=lambda : self.opentest(2))
-        self.logview = ttk.Button(self.controls, text = 'View Logs', style = 'button.TButton', command=lambda : self.openlog())
+        self.logview = ttk.Button(self.controls, text = 'Configuration', style = 'button.TButton', command=lambda : self.openlog())
         self.check1.place(height=58,width=200,x=500,y=10)
         self.check2.place(height=58,width=200,x=500,y=79)
         self.logview.place(height=58,width=200,x=500,y=217)
@@ -173,32 +186,52 @@ class MonitorFrame():
 
         self.rd = ReceiveData()
         self.creategraphs()
-        self.updategraphs()
 
     def initialize_table(self):
-        tk.Label(self.datatable,text='',font=10).grid(column=1,row=0)
-        self.datatable.rowconfigure(0, weight=1)
-        tk.Label(self.datatable,text='Temp 1',font=('verdana',12)).grid(column=1,row=2)
-        self.datatable.rowconfigure(2, weight=1)
-        tk.Label(self.datatable,text='Temp 2',font=('verdana',12)).grid(column=1,row=4)
-        self.datatable.rowconfigure(4, weight=1)
-        ttk.Separator(self.datatable, orient=tk.VERTICAL).grid(column=2, row=0, rowspan=3, sticky='ns')
-        self.datatable.columnconfigure(1, weight=1)
-        for i in range(1,37):
-            tk.Label(self.datatable,text=i,font=('verdana',12)).grid(column=i*2+1,row=0)
-            tk.Label(self.datatable,text='00.0',font=('verdana',8)).grid(column=i*2+1,row=2)
-            tk.Label(self.datatable,text='00.0',font=('verdana',8)).grid(column=i*2+1,row=4)
-            ttk.Separator(self.datatable, orient=tk.VERTICAL).grid(column=i*2, row=0, rowspan=5, sticky='ns')
-            self.datatable.columnconfigure(i*2+1, weight=1)
-        ttk.Separator(self.datatable, orient=tk.HORIZONTAL).grid(column = 1, row=1, columnspan=73,sticky='we')
-        ttk.Separator(self.datatable, orient=tk.HORIZONTAL).grid(column = 1, row=3, columnspan=73,sticky='we')
+        try:
+            self.datatable.destroy()
+        except Exception as e:
+            errorlist.append(e)
+        self.datatable = ttk.Frame(self.mainframe,style = 'table.TFrame')
+        self.datatable.place(height=125, width=1450, x=25, y=420)
+        self.databox = []
+        for i in range(6):
+            self.databox.append('')
+        for row in range(3):
+            self.datatable.rowconfigure(row, weight=1)
+            for col in range(2):
+                self.databox[row*2+col] = tk.Text(self.datatable)
+                #self.databox[row*2+col].grid(row=row, column=col,columnspan='100')
+                if row == 0 and col != 0:
+                    self.databox[row*2+col].place(height=43,width=1339,x=111,y=0)
+                    for i in range(36):
+                        self.databox[row*2+col].insert(tk.END, str(data_template[i]))
+                        self.databox[row*2+col].insert(tk.END, ' ')
+                elif row == 1 and col == 0:
+                    self.databox[row*2+col].place(height=41,width=111,x=0,y=43)
+                    self.databox[row*2+col].insert(tk.END, 'Ref Data')
+                elif row == 1 and col != 0:
+                    self.databox[row*2+col].place(height=41,width=1339,x=111,y=43)
+                    self.databox[row*2+col].insert(tk.END, serial_data1[0:36])
+                elif row == 2 and col == 0:
+                    self.databox[row*2+col].place(height=41,width=111,x=0,y=84)
+                    self.databox[row*2+col].insert(tk.END, 'IP')
+                elif row == 2 and col != 0:
+                    self.databox[row*2+col].place(height=41,width=1339,x=111,y=84)
+                    self.databox[row*2+col].insert(tk.END, serial_data2[0:36])
+                    self.datatable.columnconfigure(col, weight=0)
+                self.databox[row*2+col].config(state=tk.DISABLED,font=("Courier",11))
 
     def update_table(self):
-        for i in range(1,37):
-            tk.Label(self.datatable,text=i,font=('verdana',12)).grid(column=i*2+1,row=0)
-            tk.Label(self.datatable,text=str(serial_data1[i]),font=('verdana',8)).grid(column=i*2+1,row=2)
-            tk.Label(self.datatable,text='00.0',font=('verdana',8)).grid(column=i*2+1,row=4)
-        print('table')
+        for row in range(2):
+            for col in range(1):
+                self.databox[(row+1)*2+(col+1)].config(state='normal')
+                self.databox[(row+1)*2+(col+1)].delete(1.0, tk.END)
+                if row == 0:
+                    self.databox[(row+1)*2+(col+1)].insert(tk.END, serial_data1[0:36])
+                elif row == 1:
+                    self.databox[(row+1)*2+(col+1)].insert(tk.END, serial_data2[0:36])
+                self.databox[(row+1)*2+(col+1)].config(state=tk.DISABLED)
     
     def opentest(self,ind):
         if ind == 1:
@@ -230,8 +263,8 @@ class MonitorFrame():
             self.logwindow.deiconify() 
         except:
             self.logwindow = tk.Toplevel(root)
-            self.logwindow.title('Error Log')
-            self.logwindow.geometry("500x600")
+            self.logwindow.title('Configuration')
+            self.logwindow.geometry("500x690")
             self.logwindow.resizable(width=False, height=False)
             self.logframe = LogFrame(self.logwindow)
 
@@ -246,8 +279,9 @@ class MonitorFrame():
                     serial1.open()
                     self.data1_status.configure(style='on.TFrame')
                     self.state1 = 1
-                except:
+                except Exception as e:
                     self.data1_status.configure(style='error.TFrame')
+                    errorlist.append(e)
         elif ind == 2:
             if self.state2 == 1:
                 self.data2_status.configure(style='off.TFrame')
@@ -270,15 +304,35 @@ class MonitorFrame():
         self.fig2 = Figure(figsize=(20,20),dpi=100)
         self.fig2_info = self.fig2.add_subplot(111)
 
-    def updategraphs(self):
-        self.fig1_info.plot(self.rd.rec_data1[:][0],self.rd.rec_data1[:][1])
         self.canvas1 = FigureCanvasTkAgg(self.fig1, self.graph1)
-        self.canvas1.draw()
         self.canvas1.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand = True)
-        self.fig2_info.plot(self.rd.rec_data2[:][0],self.rd.rec_data2[:][1])
+        self.fig1_info.plot([0],[0])
+        self.canvas1.draw()
+
+        self.fig2_info.plot(0,0)
         self.canvas2 = FigureCanvasTkAgg(self.fig2, self.graph2)
         self.canvas2.draw()
         self.canvas2.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand = True)
+
+    def updategraphs(self,fignum,datapoints):
+        if fignum == 1:
+            self.fig1_info.cla()
+            lastind = len(self.rd.rec_data1_1[1][:])
+            for i in datapoints:
+                if lastind > 10:
+                    self.fig1_info.plot(self.rd.rec_data1_2[lastind-10:lastind].tolist(),self.rd.rec_data1_1[i][lastind-10:lastind].tolist())
+                else:
+                    self.fig1_info.plot(self.rd.rec_data1_2[0:lastind],self.rd.rec_data1_1[i][0:lastind])
+                self.canvas1.draw()
+        elif fignum == 2:
+            self.fig2.clf
+            lastind = len(self.rd.rec_data2_1[:][1])
+            for i in range(36):
+                if lastind > 10:
+                    self.fig2_info.plot(self.rd.rec_data2_1[i][lastind-10:lastind],self.rd.rec_data2_2[lastind-10:lastind])
+                else:
+                    self.fig2_info.plot(self.rd.rec_data2_1[i][0:lastind],self.rd.rec_data2_2[0:lastind])
+                self.canvas2.draw()
             
 class TestFrame():
     def __init__(self,parent,ind):
@@ -296,7 +350,8 @@ class TestFrame():
                     return 1
                 else:
                     return 0
-            except:
+            except Exception as e:
+                errorlist.append(e)
                 return -1
         else:
             return 0
@@ -311,7 +366,8 @@ class TestFrame():
                         return 0
                 else:
                     return 0
-            except:
+            except Exception as e:
+                errorlist.append(e)
                 return -1
         else:
             return 0
@@ -326,8 +382,8 @@ class TestFrame():
     def runtest(self,ind):
         try:
             self.mainframe.destroy()
-        except:
-            ...
+        except Exception:
+            errorlist.append(e)
         self.mainframe = ttk.Frame(self.par, style = 'second.TFrame' )
         self.mainframe.place(height=310, width=280, x=10, y=10)
         for i in range(1,11):
@@ -383,30 +439,73 @@ class TestFrame():
 class LogFrame():
     def __init__(self,parent):
         self.mainframe = ttk.Frame(parent, style = 'second.TFrame' )
-        self.mainframe.place(height=580, width=480, x=10, y=10)
-        self.errorbox = tk.Text(self.mainframe,state=tk.DISABLED)
-        self.errorbox.place(height=570, width=470,x=5,y=5)
+        self.mainframe.place(height=670, width=480, x=10, y=10)
+        self.errorbox = ScrolledText(self.mainframe,state=tk.DISABLED)
+        self.errorbox.place(height=274, width=470,x=5,y=386)
+        self.errorbox.configure(state='normal')
+        for i in errorlist:
+            self.errorbox.insert(tk.END,str(i))
+            self.errorbox.insert(tk.END,'\n\n')
+        self.errorbox.configure(state=tk.DISABLED)
+
+        self.heater1_slider = tk.Scale(self.mainframe, from_=0, to=100,orient=tk.HORIZONTAL)
+        self.heater1_slider.place(height= 58, width=240, x=10,y=250)
+        self.heater1_slider.set(heat1)
+        self.confirm1 = ttk.Button(self.mainframe, text ="Confirm (Heater 1)",style='button.TButton', command=lambda : self.heaterconfirm(1))
+        self.confirm1.place(height = 58, width = 200, x = 270, y = 250)
+        self.heater2_slider = tk.Scale(self.mainframe, from_=0, to=100,orient=tk.HORIZONTAL)
+        self.heater2_slider.place(height= 58, width=240, x=10,y=318)
+        self.heater2_slider.set(heat2)
+        self.confirm2 = ttk.Button(self.mainframe, text ="Confirm (Heater 2)",style='button.TButton', command=lambda : self.heaterconfirm(2))
+        self.confirm2.place(height = 58, width = 200, x = 270, y = 318)
+
+        self.grid_list = tk.StringVar()
+        self.grid_list.set("Grid-01 Grid-02 Grid-03 Grid-04 Grid-05 Grid-06 Grid-07 Grid-08 \
+Grid-09 Grid-10 Grid-11 Grid-12 Grid-13 Grid-14 Grid-15 Grid-16 \
+Grid-17 Grid-18 Grid-19 Grid-20 Grid-21 Grid-22 Grid-23 Grid-24 \
+Grid-25 Grid-26 Grid-27 Grid-28 Grid-29 Grid-30 Grid-31 Grid-32 \
+Grid-33 Grid-34 Grid-35 Grid-36")
+        self.grid_select = tk.Listbox(self.mainframe, listvariable=self.grid_list, selectmode=tk.MULTIPLE)
+        self.grid_select.place(x=10,y=10, width=240, height=230)
+        self.grid_scroll = tk.Scrollbar(self.grid_select, orient="vertical")
+        self.grid_scroll.configure(command=self.grid_select.yview)
+        self.grid_scroll.pack(side="right", fill="y")
+        self.grid_select.configure(yscrollcommand=self.grid_scroll.set)
+        self.grid_confirm = ttk.Button(self.mainframe, text ="Confirm",style='button.TButton', command=lambda : self.gridconfirm())
+        self.grid_confirm.place(height = 58, width = 200, x = 270, y = 182)
+
+    def heaterconfirm(self, ind):
+        if ind == 1:
+            heat1 = self.heater1_slider.get()
+        elif ind == 2:
+            heat2 = self.heater2_slider.get()
+
+    def gridconfirm(self):
+        grid_selection = self.grid_select.curselection()
+        mf.rd.datapoints = []
+        for i in grid_selection:
+            curr_string = self.grid_select.get(i)
+            mf.rd.datapoints.append(int(curr_string[5:8]))
+        print(mf.rd.datapoints)
 
 class ReceiveData():
     def __init__(self):
-        self.rec_data1 = [[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-                          [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]]
-        self.rec_data2 = [[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-                          [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]]
-        self.old_serial_data1 = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+        self.rec_data1_1 = np.array([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]], np.int32)
+        self.rec_data2_1 = np.array([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]], np.int32)
+        self.rec_data1_2 = np.array([], np.int32)
+        self.rec_data2_2 = np.array([], np.int32)
         self.time_ind = 0
+        self.datapoints = [1,2,3,4,5,6]
+        
     def updateAll(self):
-        #if sum(serial_data1) != sum(self.old_serial_data1):
-            #print('b')
-        self.old_serial_data1 = serial_data1
-        mf.update_table()
-        for i in range(0,36):
-            print(i)
-            self.rec_data1[i][0] = serial_data1[i]
-            self.rec_data1[i][1] = self.time_ind
-        mf.updategraphs()
-        self.time_ind += 1
-        root.after(1000,self.updateAll)
+        if mf.state1 == 1:
+            mf.update_table()
+            self.rec_data1_1 = np.insert(self.rec_data1_1, self.time_ind, serial_data1[0:36], axis=1)
+            self.rec_data1_2 = np.insert(self.rec_data1_2, self.time_ind, self.time_ind)
+            self.time_ind += 1
+            if (self.time_ind%5)==0 or self.time_ind==0:
+                mf.updategraphs(1,self.datapoints)
+            root.after(1000,self.updateAll)
             
 # Main Window
 root = tk.Tk()
@@ -441,9 +540,9 @@ print('Port ' + serial1.name + ' used.')
 print(dt.datetime.now())
 #print(matplotlib.dates.date2num(dt.datetime.now()))
 
-thr = threading.Thread(target=seriallisten)
-thr.start()
+thr1 = threading.Thread(target=seriallisten)
+thr1.start()
 
-root.after(5000,mf.rd.updateAll)
+root.after(2000,mf.rd.updateAll)
 
 root.mainloop()
