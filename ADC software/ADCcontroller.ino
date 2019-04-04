@@ -17,6 +17,13 @@ signed int adc_data[40];
 // 8*n + i | n - 0:4 | i - 0:7 
 
 long int count = 0;
+char ser_output_begd[5] = {'b','e','g','d','\n'};
+char ser_output_3[5] = {' ',' ',' ',' ','\n'};
+String poss_inputs[3] = {"b1\n", "dreq\n", "b2\n"};
+char ser_output_b1c[4] = {'b','1','c','\n'};
+String temp_output;
+char ser_output_b2c[4] = {'b','2','c','\n'};
+char ser_output_b2n[4] = {'b','2','n','\n'};
 
 void setup() {
   Wire.begin();
@@ -67,15 +74,15 @@ void setup() {
 void loop() {
   if (stringComplete) {
     outputString = inputString;
-    String temp[3] = {"b1\n", "dreq\n", "b2\n"};
-    if(outputString == temp[0]) {
-      char ser_output[4] = {'b','1','c','\n'};
-      Serial.write(ser_output);
+    if(outputString == poss_inputs[0]) {
+      Serial.write(ser_output_b1c);
+      Serial.flush();
+      delay(10);
     }
-    else if(outputString == temp[1]) {
-      String temp_output;
-      char ser_output_3[5] = {'b','e','g','d','\n'};
-      Serial.write(ser_output_3);
+    else if(outputString == poss_inputs[1]) {
+      Serial.write(ser_output_begd);
+
+      delay(100);
       for (int i = 0; i < 40; i++){
         temp_output = String(adc_data[i]);
         switch(temp_output.length()){
@@ -115,7 +122,8 @@ void loop() {
             ser_output_3[4] = '\n';
             break;
         }
-        Serial.write('-');
+        Serial.write(ser_output_3);
+        delay(100);
         //Serial.write(ser_output_3);
       }
       ser_output_3[0] = 'e';
@@ -123,12 +131,9 @@ void loop() {
       ser_output_3[2] = 'd';
       ser_output_3[3] = 'd';
       ser_output_3[4] = '\n';
-      Serial.write(ser_output_3);
+      Serial.print(ser_output_3);
     }
-    else if(outputString == temp[2]) {
-      Serial.print('a');
-      char ser_output[4] = {'b','2','c','\n'};
-      char ser_output_2[4] = {'b','2','n','\n'};
+    else if(outputString == poss_inputs[2]) {
       bool readok = 1;
       bool writeok = 1;
 
@@ -147,13 +152,14 @@ void loop() {
           writeok = 0;
         }
       }
+      delay(100);
       if(readok == 1 && writeok == 1) {
-        Serial.print('b');
-        Serial.print(ser_output);
+        Serial.print(ser_output_b2c);
+        delay(100);
       }
       else if(readok == 1 && writeok != 1) {
-        Serial.print('c');
-        Serial.print(ser_output_2);
+        Serial.print(ser_output_b2n);
+        delay(100);
       }
     }
     inputString = "";
