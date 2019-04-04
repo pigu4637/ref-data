@@ -1,4 +1,17 @@
-# --- Imports ---
+############################################################################################################################################################################
+# refdata_monitor.py
+#
+# Author: Pierre Guillaud
+# Data modified: 04/03/2019
+#
+# This program inputs data obtained by a dedicated ADC MCU measuring 36 temperatures using thermistors and data obtained from a dedicated IP MCU measuring 36 temperatures
+# using radiometric cameras, and outputs 12 voltage percents to a dedicated MCU powering simulation electronics resistors.
+# Different frames display the data inputs and outputs, and allow for data saving and serial testing
+#
+############################################################################################################################################################################
+
+# ----- Imports ------------------------------------------------------------------------------------------------------------------------------------------------------------
+
 # Tkinter
 try:
     import Tkinter as tk
@@ -29,6 +42,7 @@ import serial
 
 # Threading
 import threading
+from multiprocessing import Process, Value, Array
 
 # Sys
 import sys
@@ -47,7 +61,23 @@ import datetime as dt
 # Time
 import time
 
-# -- Global variables --
+# ----- Global variables ---------------------------------------------------------------------------------------------------------------------------------------------------
+
+# serial_data1 : global variable containing thermistor temperatures
+#   set by serial1, used graph1, table1
+# serial_data2 : global variable containing camera temperatures
+#   set by serial2, used by graph2, table2
+
+# data_template: temperature index string array
+#   used by datatable
+# b1_rec, b2_rec, b3_rec used for ping tests with ADC board
+# IP_flag : control decisions from IP
+#   set by serial2, unused
+# heat1, heat2 : percent set for simulation electronics
+#   set by logframe, used by serial3
+
+# errorlist : global list of exceptions encountered
+
 serial_data1 = [00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,
                 00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0]
 serial_data2 = [00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,
@@ -61,28 +91,59 @@ b3_rec = False
 heat1 = [0, 0, 0, 0, 0, 0]
 heat2 = [0, 0, 0, 0, 0, 0]
 errorlist = []
+IP_flag = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                      0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 
+ # Save current time to errorlist for future references
 errorlist.append(dt.datetime.now())
 errorlist.append(matplotlib.dates.date2num(dt.datetime.now()))
 
-# -- Serial --
-# Serial ports
+# ----- Serial -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+# --- Serial1 ---
+    # This serial port is used to input and output to the ADC MCU (8-N-9600) on COM3
 serial1 = serial.Serial(timeout=1,parity=serial.PARITY_NONE,stopbits=serial.STOPBITS_ONE,bytesize=serial.EIGHTBITS)
 serial1.baudrate = 9600
 serial1.port = 'COM3'
-errorlist.append('Port ' + serial1.name + ' used.')
+errorlist.append('Port ' + serial1.name + ' used (1).')
+
+# --- Serial2 ---
+    # This serial port is used to input and output to the IP MCU (8-N-9600)
+serial2 = serial.Serial(timeout=1,parity=serial.PARITY_NONE,stopbits=serial.STOPBITS_ONE,bytesize=serial.EIGHTBITS)
+serial2.baudrate = 9600
+serial2.port = 'COM4'
+errorlist.append('Port ' + serial2.name + ' used (2).')
+
+# --- Serial3 ---
+    # This serial port is used to output to the HEATER MCU (8-N-9600)
+serial3 = serial.Serial(timeout=1,parity=serial.PARITY_NONE,stopbits=serial.STOPBITS_ONE,bytesize=serial.EIGHTBITS)
+serial3.baudrate = 9600
+serial3.port = 'COM5'
+errorlist.append('Port ' + serial3.name + ' used (3).')
 errorlist.append('---')
+try:
+    serial3.open()
+except Exception as e:
+    errorlist.append('{}'.format(sys.exc_info()[-1].tb_lineno))
+    errorlist.append(e)
+    errorlist.append('---')
 
 
-# -- Threads ---
+# ----- Threads ------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-# Serial listenner
-def seriallisten():
+# --- Serial listener (Thermistors system) ---
+    # This function continuously waits for incoming serial data to read, and writes to serial communication on a fixed time interval
+
+def seriallisten_therm():
+    # Global variable call
     global b1_rec
+    global b2_rec
+    global b3_rec
     global serial_data1
     global update1
     global errorlist
+
+    # Local variable definition
     n = 0
     rec_data_status = 0
     rec_ind = 0
@@ -92,6 +153,8 @@ def seriallisten():
                      0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
     closest_temp_array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
                           0,0,0,0,0,0,0,0,0,0]
+    
+        # Constant conversion factors from ADC resistance readings to actual temperatures
     res_to_temp = [190953, 145953, 112440, 87285, 68260, 53762,
                    42636, 34038, 27348, 22108, 17979, 14706, 12094,
                    10000, 8310.8, 6941.1, 5824.9, 4910.6, 4158.3,
@@ -103,54 +166,136 @@ def seriallisten():
             try:
                 n += 1
                 ini_input1 = ''
+                    # If incoming serial data buffer full, decode serial data and save
                 if serial1.inWaiting() > 0:
                     ini_input1_raw = serial1.readline()
                     ini_input1 = ini_input1_raw.decode('utf-8')
+
+                    # Send first ping to ADC MCU, to check if serial communication works correctly
                 if n == 200000 and rec_data_status == 0:
                     ser_output = 'b' + '1' + '\n'
                     serial1.write(ser_output.encode('ascii'))
-                    n = 0
                     b1_rec = False
+
+                    # Send second ping to ADC MCU, to check if MCU can communicate with the ADC board
+                if n == 250000 and rec_data_status == 0:
+                    ser_output = 'b' + '2' + '\n'
+                    serial1.write(ser_output.encode('ascii'))
+                    n = 0
+                    b2_rec = False
+                    b3_rec = False
+
+                    # Send fetch message to ADC MCU, to start receiving ADC data
                 if n == 100000:
                     rec_data_status = 0
                     ser_output = 'd' + 'r' + 'e' + 'q' + '\n'
                     serial1.write(ser_output.encode('ascii'))
+
+                    # if currently in the process of receiving ADC data, save data to specific array, then increment array
                 if rec_data_status == 1 and ini_input1 != 'endd\n' and ini_input1 != '':
                     rec_data[rec_ind] = ini_input1
                     rec_ind += 1
+
+                    # if first ping successful, set to true appropriate variable
                 if ini_input1 == 'b1c\n':
                     b1_rec = True
+
+                    # if second ping partially successful, set to true and false appropriate variables
+                if ini_input1 == 'b2c\n':
+                    b2_rec = True
+                    b3_rec = True
+
+                    # if second ping fully successful, set to true appropriate variables
+                if ini_input1 == 'b2n\n':
+                    b2_rec = True
+
+                    # if received, indicates that next 40 serial data inputs will be ADC data
                 elif ini_input1 == 'begd\n':
                     rec_data_status = 1
                     rec_ind = 0
+
+                    # if received, indicates that ADC data finished transfering, can proceed to transform into useful temperature data
                 elif ini_input1 == 'endd\n':
                     rec_data_status = 0
-                    for i in range(0,40):
+                    for i in range(0,40): # for each data point
                         data_temp = rec_data[i]
                         data_temp_2 = [0,0,0,0]
                         for j in range(0,4):
                             data_temp_2[j] = data_temp[j]
                         if int(''.join(data_temp_2)) != 0:
-                            # Convert to resistance, then to temperature
+                                # Convert ADC data to resistance
                             conc_rec_data[i] = round(18000/(3.3/(3.3*int(''.join(data_temp_2))/4095)-1))
                             serial_data1[i] = 0
-                            #print(i)
-                            #print(conc_rec_data[i])
                             if conc_rec_data[i] < 190953:
+                                    # Convert resistance values to temperatures, if resistance is within the min and max convertion factors
                                 closest_temp_array[:] = [abs(conc_rec_data[i]-m) for m in res_to_temp]
                                 closest_temp_ind = closest_temp_array.index(min(closest_temp_array))
                                 if conc_rec_data[i] < res_to_temp[closest_temp_ind]:
                                     closest_temp_ind += 1
                                 resulting_temp = (-40+5*(closest_temp_ind))-5*((conc_rec_data[i]-res_to_temp[closest_temp_ind])/(res_to_temp[closest_temp_ind-1]-res_to_temp[closest_temp_ind]))
                                 serial_data1[i] = abs(round(resulting_temp,2))
-                            #print(serial_data1[i])
 
             except Exception as e:
                 errorlist.append('{}'.format(sys.exc_info()[-1].tb_lineno))
                 errorlist.append(e)
                 errorlist.append('---')
 
-# --- Classes ---
+# --- Serial listener (Image Processor system) ---
+    # This function continuously waits for incoming serial data to read
+    
+def seriallisten_IP():
+    # Global variable call
+    global serial_data2
+    global update2
+    global errorlist
+    global IP_flag
+
+    # Local variable definition
+    rec_data_status = 0
+    rec_ind = 0
+    rec_data = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+    
+    while 1:
+        if serial2.isOpen() == True:
+            try:
+                ini_input1 = ''
+                    # If incoming serial data buffer full, decode serial data and save
+                if serial2.inWaiting() > 0:
+                    ini_input1_raw = serial1.readline()
+                    ini_input1 = ini_input1_raw.decode('utf-8')
+
+                    # if received, indicates that next 36 serial data inputs will be IP data
+                if ini_input1 == 'begin\n':
+                    rec_data_status = 1
+                    rec_ind = 0
+
+                    # if currently in the process of receiving IP data, save data to specific array, then increment array
+                if rec_data_status == 1 and ini_input1 != 'end\n' and ini_input1 != '':
+                    rec_data[rec_ind] = ini_input1
+                    rec_ind += 1
+
+                    # if received, indicates that IP data finished transfering, can proceed to transform into useful temperature data
+                    # format of inputs FSTTTT\n, where F is flag (normal, too hot, too cold), S is sign of temperature, T is temperature
+                elif ini_input1 == 'end\n':
+                    rec_data_status = 0
+                    for i in range(0,36): # For each data point
+                        data_temp = rec_data[i]
+                        IP_flag[i] = data_temp[0] # Sets correct flag in global variables
+                        if data_temp[1] == 0:
+                            sign = 1
+                        else:
+                            sign = -1
+                        serial_data2[i] = sign*(int(data_temp[2:(len(data_temp)-1)])/100) # Sets correct temperature in global variables
+                    update2 = 1
+
+            except Exception as e:
+                errorlist.append('{}'.format(sys.exc_info()[-1].tb_lineno))
+                errorlist.append(e)
+                errorlist.append('---')
+
+
+# ----- Classes ------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 # MonitorFrame
     # Main GUI window, handles graphs, controls, table, save options
@@ -169,8 +314,8 @@ class MonitorFrame():
         self.controls = ttk.Frame(self.mainframe,style = 'controls.TFrame')
         self.controls.place(height=285, width=1450, x=25, y=555)
         
-        self.onoff_data1 = ttk.Button(self.controls, text = 'Toggle data1', style = 'button.TButton',command=lambda : self.togglegraph(1))
-        self.onoff_data2 = ttk.Button(self.controls, text = 'Toggle data2', style = 'button.TButton',command=lambda : self.togglegraph(2))
+        self.onoff_data1 = ttk.Button(self.controls, text = 'Toggle Ref Data', style = 'button.TButton',command=lambda : self.togglegraph(1))
+        self.onoff_data2 = ttk.Button(self.controls, text = 'Toggle IP Data', style = 'button.TButton',command=lambda : self.togglegraph(2))
         self.onoff_data1.place(height=127,width=200,x=25,y=10)
         self.onoff_data2.place(height=127,width=200,x=25,y=148)
         self.data1_status = ttk.Frame(self.controls, style = 'off.TFrame')
@@ -222,29 +367,29 @@ class MonitorFrame():
             else:
                 self.open_savefile = open(self.filename,"a")
             if ind == 1:
-                self.savingcont = ttk.Frame(self.controls, style = 'error.TFrame')
+                self.savingcont.configure(style = 'error.TFrame')
 
                 to_write = str(self.rd.rec_data1_2[-1])
                 for i in range(36):
                     to_write = to_write + ' ' + str(self.rd.rec_data1_1[i][-1])
                 to_write = to_write + '\n'
                 self.open_savefile.write(to_write)
-                self.savingcont = ttk.Frame(self.controls, style = 'off.TFrame')
+                self.savingcont.configure(style = 'off.TFrame')
             if ind == 2:
                 if self.save_status == 0:
                     self.save_index = self.rd.rec_data1_2[-1]
                     self.save_status = 1
-                    self.savingcont = ttk.Frame(self.controls, style = 'on.TFrame')
+                    self.savingcont.configure(style = 'on.TFrame')
                 else:
                     self.save_status = 0
-                    self.savingcont = ttk.Frame(self.controls, style = 'error.TFrame')
+                    self.savingcont.configure(style = 'error.TFrame')
                     for j in range(self.save_index, self.rd.rec_data1_2[-1]):
                         to_write = str(self.rd.rec_data1_2[j])
                         for i in range(36):
                             to_write = to_write + ' ' + str(self.rd.rec_data1_1[i][j])
                         to_write = to_write + '\n'
                         self.open_savefile.write(to_write)
-                    self.savingcont = ttk.Frame(self.controls, style = 'off.TFrame')
+                    self.savingcont.configure(style = 'off.TFrame')
 
             self.open_savefile.close()
         except Exception as e:
@@ -268,7 +413,6 @@ class MonitorFrame():
             self.datatable.rowconfigure(row, weight=1)
             for col in range(2):
                 self.databox[row*2+col] = tk.Text(self.datatable)
-                #self.databox[row*2+col].grid(row=row, column=col,columnspan='100')
                 if row == 0 and col != 0:
                     self.databox[row*2+col].place(height=43,width=1339,x=111,y=0)
                     for i in range(36):
@@ -295,9 +439,19 @@ class MonitorFrame():
                 self.databox[(row+1)*2+(col+1)].config(state='normal')
                 self.databox[(row+1)*2+(col+1)].delete(1.0, tk.END)
                 if row == 0:
-                    self.databox[(row+1)*2+(col+1)].insert(tk.END, serial_data1[0:36])
+                    temp = []
+                    for i in range(36):
+                        temp.append(str(serial_data1[i]))
+                        if temp[i] == '0':
+                            temp[i] = "0.0"
+                    self.databox[(row+1)*2+(col+1)].insert(tk.END, temp)
                 elif row == 1:
-                    self.databox[(row+1)*2+(col+1)].insert(tk.END, serial_data2[0:36])
+                    temp = []
+                    for i in range(36):
+                        temp.append(str(serial_data2[i]))
+                        if temp[i] == '0':
+                            temp[i] = "0.0"
+                    self.databox[(row+1)*2+(col+1)].insert(tk.END, temp)
                 self.databox[(row+1)*2+(col+1)].config(state=tk.DISABLED)
     
     def opentest(self,ind):
@@ -353,11 +507,19 @@ class MonitorFrame():
                     errorlist.append('---')
         elif ind == 2:
             if self.state2 == 1:
+                serial2.close()
                 self.data2_status.configure(style='off.TFrame')
                 self.state2 = 0
             else:
-                self.data2_status.configure(style='on.TFrame')
-                self.state2 = 1
+                try:
+                    serial2.open()
+                    self.data2_status.configure(style='on.TFrame')
+                    self.state2 = 1
+                except Exception as e:
+                    self.data2_status.configure(style='error.TFrame')
+                    errorlist.append('{}'.format(sys.exc_info()[-1].tb_lineno))
+                    errorlist.append(e)
+                    errorlist.append('---')
 
     def choosefile(self):
         self.saveloc = askdirectory()
@@ -376,12 +538,12 @@ class MonitorFrame():
         self.canvas1 = FigureCanvasTkAgg(self.fig1, self.graph1)
         self.canvas1.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand = True)
         self.fig1_info.plot([0],[0], 'fuchsia', label='Legend')
-        self.legend1 = self.fig1_info.legend(loc='upper center', shadow=False, fontsize='large')
+        self.legend1 = self.fig1_info.legend(loc='upper left', shadow=False, fontsize='large')
         self.legend1.get_frame().set_facecolor('white')
         self.canvas1.draw()
 
         self.fig2_info.plot(0,0, 'fuchsia', label='Legend')
-        self.legend2 = self.fig2_info.legend(loc='upper center', shadow=False, fontsize='large')
+        self.legend2 = self.fig2_info.legend(loc='upper left', shadow=False, fontsize='large')
         self.legend2.get_frame().set_facecolor('white')
         self.canvas2 = FigureCanvasTkAgg(self.fig2, self.graph2)
         self.canvas2.draw()
@@ -396,23 +558,23 @@ class MonitorFrame():
             self.fig1_info.cla()
             lastind = len(self.rd.rec_data1_1[1][:])
             for i in datapoints:
-                if lastind > 10:
-                    self.fig1_info.plot(self.rd.rec_data1_2[lastind-10:lastind].tolist(),self.rd.rec_data1_1[i][lastind-10:lastind].tolist(), self.graph_colors[i-1], label=('Grid-'+str(i)))
+                if lastind > 50:
+                    self.fig1_info.plot(self.rd.rec_data1_2[lastind-50:lastind].tolist(),self.rd.rec_data1_1[i-1][lastind-50:lastind].tolist(), self.graph_colors[i-1], label=('Grid-'+str(i)))
                 else:
-                    self.fig1_info.plot(self.rd.rec_data1_2[0:lastind],self.rd.rec_data1_1[i][0:lastind], self.graph_colors[i-1], label=('Grid-'+str(i)))
-                self.legend1 = self.fig1_info.legend(loc='upper center', shadow=False, fontsize='large')
-                self.legend1.get_frame().set_facecolor('C0')
+                    self.fig1_info.plot(self.rd.rec_data1_2[0:lastind],self.rd.rec_data1_1[i-1][0:lastind], self.graph_colors[i-1], label=('Grid-'+str(i)))
+                self.legend1 = self.fig1_info.legend(loc='upper left', shadow=False)
+                self.legend1.get_frame().set_facecolor('white')
                 self.canvas1.draw()
         elif fignum == 2:
-            self.fig2.clf
-            lastind = len(self.rd.rec_data2_1[:][1])
+            self.fig2_info.cla()
+            lastind = len(self.rd.rec_data2_1[1][:])
             for i in datapoints:
                 if lastind > 10:
-                    self.fig2_info.plot(self.rd.rec_data2_1[i][lastind-10:lastind],self.rd.rec_data2_2[lastind-10:lastind], self.graph_colors[i-1], label=('Grid-'+str(i)))
+                    self.fig2_info.plot(self.rd.rec_data2_2[lastind-10:lastind].tolist(),self.rd.rec_data2_1[i-1][lastind-10:lastind].tolist(), self.graph_colors[i-1], label=('Grid-'+str(i)))
                 else:
-                    self.fig2_info.plot(self.rd.rec_data2_1[i][0:lastind],self.rd.rec_data2_2[0:lastind], self.graph_colors[i-1], label=('Grid-'+str(i)))
-                self.legend2 = self.fig2_info.legend(loc='upper center', shadow=False, fontsize='large')
-                self.legend2.get_frame().set_facecolor('C0')
+                    self.fig2_info.plot(self.rd.rec_data2_2[0:lastind],self.rd.rec_data2_1[i-1][0:lastind], self.graph_colors[i-1], label=('Grid-'+str(i)))
+                self.legend2 = self.fig2_info.legend(loc='upper left', shadow=False)
+                self.legend2.get_frame().set_facecolor('white')
                 self.canvas2.draw()
             
 class TestFrame():
@@ -423,7 +585,6 @@ class TestFrame():
         self.refreshbutton = ttk.Button(parent,style='button.TButton', text='Run Test', state = tk.DISABLED, command=lambda : self.runtest(ind))
         self.refreshbutton.place(height=60,width = 280,y=330,x=10)
 
-            # TODO
     def serial_test(self,ind):
         if ind == 1:
             try:
@@ -437,7 +598,16 @@ class TestFrame():
                 errorlist.append('---')
                 return -1
         else:
-            return 0
+            try:
+                if serial2.isOpen():
+                    return 1
+                else:
+                    return 0
+            except Exception as e:
+                errorlist.append('{}'.format(sys.exc_info()[-1].tb_lineno))
+                errorlist.append(e)
+                errorlist.append('---')
+                return -1
         
     def connect_test(self,ind):
         if ind == 1:
@@ -455,9 +625,21 @@ class TestFrame():
                 errorlist.append('---')
                 return -1
         else:
-            return 0
+            try:
+                if serial2.isOpen():
+                    if False == True: #TEST IP
+                        return 1
+                    else:
+                        return 0
+                else:
+                    return 0
+            except Exception as e:
+                errorlist.append('{}'.format(sys.exc_info()[-1].tb_lineno))
+                errorlist.append(e)
+                errorlist.append('---')
+                return -1
         
-    def write_test(self,ind):
+    def read_test(self,ind):
         if ind == 1:
             try:
                 if serial1.isOpen():
@@ -473,9 +655,21 @@ class TestFrame():
                 ferrorlist.append('---')
                 return -1
         else:
-            return 0
+            try:
+                if serial2.isOpen():
+                    if False == True: #TEST IP
+                        return 1
+                    else:
+                        return 0
+                else:
+                    return 0
+            except Exception as e:
+                errorlist.append('{}'.format(sys.exc_info()[-1].tb_lineno))
+                errorlist.append(e)
+                ferrorlist.append('---')
+                return -1
         
-    def read_test(self,ind):
+    def write_test(self,ind):
         if ind == 1:
             try:
                 if serial1.isOpen():
@@ -491,7 +685,19 @@ class TestFrame():
                 errorlist.append('---')
                 return -1
         else:
-            return 0
+            try:
+                if serial2.isOpen():
+                    if False == True: #TEST IP
+                        return 1
+                    else:
+                        return 0
+                else:
+                    return 0
+            except Exception as e:
+                errorlist.append('{}'.format(sys.exc_info()[-1].tb_lineno))
+                errorlist.append(e)
+                errorlist.append('---')
+                return -1
         
     def temp_test(self,ind):
         try:
@@ -502,6 +708,15 @@ class TestFrame():
                     all_temp = 0
                 else:
                     for i in serial_data1[0:36]:
+                        if i != 0:
+                            partial = 1
+                        else:
+                            all_temp = 0
+            elif ind == 2:
+                if sum(serial_data2) == 0:
+                    all_temp = 0
+                else:
+                    for i in serial_data2[0:36]:
                         if i != 0:
                             partial = 1
                         else:
@@ -523,7 +738,7 @@ class TestFrame():
     def runtest(self,ind):
         try:
             self.mainframe.destroy()
-        except Exception:
+        except Exception as e:
             errorlist.append('{}'.format(sys.exc_info()[-1].tb_lineno))
             errorlist.append(e)
             errorlist.append('---')
@@ -552,7 +767,7 @@ class TestFrame():
             tk.Label(self.mainframe,text='ERROR - CHECK LOGS',font=('fixedsys',12),background='lightgrey').grid(column=0,row=4)
 
         tk.Label(self.mainframe,text='Checking MCU Input Connections...',font=('fixedsys',12),background='lightgrey').grid(column=0,row=5,stick='w')
-        res = self.write_test(ind)
+        res = self.read_test(ind)
         if res == 1:
             tk.Label(self.mainframe,text='GOOD CONNECTION',font=('fixedsys',12),background='green3').grid(column=0,row=6)
         elif res == 0:
@@ -561,7 +776,7 @@ class TestFrame():
             tk.Label(self.mainframe,text='ERROR - CHECK LOGS',font=('fixedsys',12),background='lightgrey').grid(column=0,row=6)
 
         tk.Label(self.mainframe,text='Checking MCU Output Connections...',font=('fixedsys',12),background='lightgrey').grid(column=0,row=7,stick='w')
-        res = self.read_test(ind)
+        res = self.write_test(ind)
         if res == 1:
             tk.Label(self.mainframe,text='GOOD CONNECTION',font=('fixedsys',12),background='green3').grid(column=0,row=8)
         elif res == 0:
@@ -636,10 +851,14 @@ Grid-33 Grid-34 Grid-35 Grid-36")
         self.grid_confirm.place(height = 58, width = 200, x = 270, y = 182)
 
     def heaterconfirm(self, ind):
+        i = self.heater_nb.index(self.heater_nb.select())
         if ind == 1:
-            heat1 = self.heater1_slider.get()
+            heat1[i] = self.heater1_slider[i].get()
+            temp = heat1[i]
         elif ind == 2:
-            heat2 = self.heater2_slider.get()
+            heat2[i] = self.heater2_slider[i].get()
+            temp = heat2[i]
+        self.send_cmd(i,ind,temp)
 
     def gridconfirm(self):
         grid_selection = self.grid_select.curselection()
@@ -648,6 +867,20 @@ Grid-33 Grid-34 Grid-35 Grid-36")
             curr_string = self.grid_select.get(i)
             mf.rd.datapoints.append(int(curr_string[5:8]))
         print(mf.rd.datapoints)
+
+    def send_cmd(self,ind,ind2,temp):
+        try:
+            if (2*ind+ind2) < 10:
+                output = '0'+str(2*ind+ind2)+str(temp)+'\n'
+            else:
+                output = str(2*ind+ind2)+str(temp)+'\n'
+            print(output)
+            serial3.write(output.encode('ascii'))
+        except Exception as e:
+            errorlist.append('{}'.format(sys.exc_info()[-1].tb_lineno))
+            errorlist.append(e)
+            errorlist.append('---')
+        
 
 class ReceiveData():
     def __init__(self):
@@ -659,14 +892,23 @@ class ReceiveData():
         self.datapoints = [1,2,3,4,5,6]
         
     def updateAll(self):
-        if mf.state1 == 1:
+        if mf.state1 == 1 or mf.state2 == 1:
             mf.update_table()
-            self.rec_data1_1 = np.insert(self.rec_data1_1, self.time_ind, serial_data1[0:36], axis=1)
-            self.rec_data1_2 = np.insert(self.rec_data1_2, self.time_ind, self.time_ind)
+            if mf.state1 == 1:
+                self.rec_data1_1 = np.insert(self.rec_data1_1, self.time_ind, serial_data1[0:36], axis=1)
+                self.rec_data1_2 = np.insert(self.rec_data1_2, self.time_ind, self.time_ind)
+            if mf.state2 == 1:
+                self.rec_data2_1 = np.insert(self.rec_data2_1, self.time_ind, serial_data2[0:36], axis=1)
+                self.rec_data2_2 = np.insert(self.rec_data2_2, self.time_ind, self.time_ind)
             self.time_ind += 1
+            
             if (self.time_ind%5)==0 or self.time_ind==0:
-                mf.updategraphs(1,self.datapoints)
-            root.after(1000,self.updateAll)
+                if mf.state1 == 1:
+                    mf.updategraphs(1,self.datapoints)
+                if mf.state2 == 1:
+                    mf.updategraphs(2,self.datapoints)
+                
+        root.after(100,self.updateAll)
             
 # Main Window
 root = tk.Tk()
@@ -690,11 +932,15 @@ s.configure('error.TFrame',background='orange',relief='raised')
 mf = MonitorFrame(root)
 
 
-#------
+# ----- Thread initialization ----------------------------------------------------------------------------------------------------------------------------------------------
 
-thr1 = threading.Thread(target=seriallisten)
+#thr1 = threading.Thread(target=seriallisten_therm)
+#thr1.start()
+#thr2 = threading.Thread(target=seriallisten_IP)
+#thr2.start()
+thr1 = Process(target=seriallisten_therm)
 thr1.start()
+thr1.join()
 
 root.after(2000,mf.rd.updateAll)
-
 root.mainloop()
