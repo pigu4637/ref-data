@@ -33,6 +33,7 @@ from tkintertable import TableCanvas, TableModel
 
 # Numpy
 import numpy as np
+import math
 
 # OS
 import os as os
@@ -111,14 +112,14 @@ errorlist.append('Port ' + serial1.name + ' used (1).')
     # This serial port is used to input and output to the IP MCU (8-N-9600)
 serial2 = serial.Serial(timeout=1,parity=serial.PARITY_NONE,stopbits=serial.STOPBITS_ONE,bytesize=serial.EIGHTBITS)
 serial2.baudrate = 9600
-serial2.port = 'COM4'
+serial2.port = 'COM6'
 errorlist.append('Port ' + serial2.name + ' used (2).')
 
 # --- Serial3 ---
     # This serial port is used to output to the HEATER MCU (8-N-9600)
 serial3 = serial.Serial(timeout=1,parity=serial.PARITY_NONE,stopbits=serial.STOPBITS_ONE,bytesize=serial.EIGHTBITS)
 serial3.baudrate = 9600
-serial3.port = 'COM5'
+serial3.port = 'COM4'
 errorlist.append('Port ' + serial3.name + ' used (3).')
 errorlist.append('---')
 try:
@@ -228,11 +229,12 @@ def seriallisten_therm():
                             serial_data1[i] = 0
                             if conc_rec_data[i] < 190953:
                                     # Convert resistance values to temperatures, if resistance is within the min and max convertion factors
-                                closest_temp_array[:] = [abs(conc_rec_data[i]-m) for m in res_to_temp]
-                                closest_temp_ind = closest_temp_array.index(min(closest_temp_array))
-                                if conc_rec_data[i] < res_to_temp[closest_temp_ind]:
-                                    closest_temp_ind += 1
-                                resulting_temp = (-40+5*(closest_temp_ind))-5*((conc_rec_data[i]-res_to_temp[closest_temp_ind])/(res_to_temp[closest_temp_ind-1]-res_to_temp[closest_temp_ind]))
+                                #closest_temp_array[:] = [abs(conc_rec_data[i]-m) for m in res_to_temp]
+                                #closest_temp_ind = closest_temp_array.index(min(closest_temp_array))
+                                #if conc_rec_data[i] < res_to_temp[closest_temp_ind]:
+                                #    closest_temp_ind += 1
+                                #resulting_temp = (-40+5*(closest_temp_ind))-5*((conc_rec_data[i]-res_to_temp[closest_temp_ind])/(res_to_temp[closest_temp_ind-1]-res_to_temp[closest_temp_ind]))
+                                resulting_temp = 1/(1/298+1/3435*(math.log(conc_rec_data[i]/10000)))-273
                                 serial_data1[i] = abs(round(resulting_temp,2))
 
             except Exception as e:
@@ -359,22 +361,47 @@ class MonitorFrame():
     def save_data(self,ind):
         try:
             if self.save_file_exists == False:
-                self.filename = 'refdata' + str(round(matplotlib.dates.date2num(dt.datetime.now())*100000)) + '.txt'
-                self.filename = os.path.join(self.saveloc, self.filename)
-                print(self.filename)
-                self.open_savefile = open(self.filename,"w+")
+                self.filename_RD = 'refdata' + str(round(matplotlib.dates.date2num(dt.datetime.now())*100000)) + '.txt'
+                self.filename_RD = os.path.join(self.saveloc, self.filename_RD)
+                print(self.filename_RD)
+                self.filename_IP = 'IPdata' + str(round(matplotlib.dates.date2num(dt.datetime.now())*100000)) + '.txt'
+                self.filename_IP = os.path.join(self.saveloc, self.filename_IP)
+                print(self.filename_IP)
+                self.open_savefile_RD = open(self.filename_RD,"w+")
+                self.open_savefile_IP = open(self.filename_IP,"w+")
                 self.save_file_exists = True
             else:
-                self.open_savefile = open(self.filename,"a")
+                self.open_savefile_RD = open(self.filename_RD,"a")
+                self.open_savefile_IP = open(self.filename_IP,"a")
             if ind == 1:
                 self.savingcont.configure(style = 'error.TFrame')
 
-                to_write = str(self.rd.rec_data1_2[-1])
-                for i in range(36):
-                    to_write = to_write + ' ' + str(self.rd.rec_data1_1[i][-1])
-                to_write = to_write + '\n'
-                self.open_savefile.write(to_write)
+                try:
+                    self.open_savefile_RD.write('\n'+'# '+self.commentbox.get("1.0",tk.END))
+                    to_write = str(self.rd.rec_data1_2[-1])
+                    for i in range(36):
+                        to_write = to_write + ' ' + str(self.rd.rec_data1_1[i][-1])
+                    to_write = to_write + '\n'
+                    self.open_savefile_RD.write(to_write)
+                except Exception as e:
+                    errorlist.append('{}'.format(sys.exc_info()[-1].tb_lineno))
+                    errorlist.append(e)
+                    errorlist.append('---')
+
+                try:
+                    self.open_savefile_IP.write('\n'+'# '+self.commentbox.get("1.0",tk.END))
+                    to_write = str(self.rd.rec_data2_2[-1])
+                    for i in range(36):
+                        to_write = to_write + ' ' + str(self.rd.rec_data2_1[i][-1])
+                    to_write = to_write + '\n'
+                    self.open_savefile_IP.write(to_write)
+                except Exception as e:
+                    errorlist.append('{}'.format(sys.exc_info()[-1].tb_lineno))
+                    errorlist.append(e)
+                    errorlist.append('---')
+                
                 self.savingcont.configure(style = 'off.TFrame')
+                
             if ind == 2:
                 if self.save_status == 0:
                     self.save_index = self.rd.rec_data1_2[-1]
@@ -383,15 +410,38 @@ class MonitorFrame():
                 else:
                     self.save_status = 0
                     self.savingcont.configure(style = 'error.TFrame')
-                    for j in range(self.save_index, self.rd.rec_data1_2[-1]):
-                        to_write = str(self.rd.rec_data1_2[j])
-                        for i in range(36):
-                            to_write = to_write + ' ' + str(self.rd.rec_data1_1[i][j])
-                        to_write = to_write + '\n'
-                        self.open_savefile.write(to_write)
+
+                    try:
+                        self.open_savefile_RD.write('\n'+'# '+self.commentbox.get("1.0",tk.END))
+                        for j in range(self.save_index, self.rd.rec_data1_2[-1]):
+                            to_write = str(self.rd.rec_data1_2[j])
+                            for i in range(36):
+                                to_write = to_write + ' ' + str(self.rd.rec_data1_1[i][j])
+                            to_write = to_write + '\n'
+                            self.open_savefile_RD.write(to_write)
+                    except Exception as e:
+                        errorlist.append('{}'.format(sys.exc_info()[-1].tb_lineno))
+                        errorlist.append(e)
+                        errorlist.append('---')                    
+
+                    try:
+                        self.open_savefile_IP.write('\n'+'# '+self.commentbox.get("1.0",tk.END))
+                        for j in range(self.save_index, self.rd.rec_data2_2[-1]):
+                            to_write = str(self.rd.rec_data2_2[j])
+                            for i in range(36):
+                                to_write = to_write + ' ' + str(self.rd.rec_data2_1[i][j])
+                            to_write = to_write + '\n'
+                            self.open_savefile_RD.write(to_write)
+                    except Exception as e:
+                        errorlist.append('{}'.format(sys.exc_info()[-1].tb_lineno))
+                        errorlist.append(e)
+                        errorlist.append('---')
+                        
                     self.savingcont.configure(style = 'off.TFrame')
 
-            self.open_savefile.close()
+            self.open_savefile_RD.close()
+            self.open_savefile_IP.close()
+            
         except Exception as e:
             errorlist.append('{}'.format(sys.exc_info()[-1].tb_lineno))
             errorlist.append(e)
@@ -558,8 +608,8 @@ class MonitorFrame():
             self.fig1_info.cla()
             lastind = len(self.rd.rec_data1_1[1][:])
             for i in datapoints:
-                if lastind > 50:
-                    self.fig1_info.plot(self.rd.rec_data1_2[lastind-50:lastind].tolist(),self.rd.rec_data1_1[i-1][lastind-50:lastind].tolist(), self.graph_colors[i-1], label=('Grid-'+str(i)))
+                if lastind > 10:
+                    self.fig1_info.plot(self.rd.rec_data1_2[lastind-10:lastind].tolist(),self.rd.rec_data1_1[i-1][lastind-10:lastind].tolist(), self.graph_colors[i-1], label=('Grid-'+str(i)))
                 else:
                     self.fig1_info.plot(self.rd.rec_data1_2[0:lastind],self.rd.rec_data1_1[i-1][0:lastind], self.graph_colors[i-1], label=('Grid-'+str(i)))
                 self.legend1 = self.fig1_info.legend(loc='upper left', shadow=False)
@@ -806,7 +856,7 @@ class LogFrame():
         for i in errorlist:
             self.errorbox.insert(tk.END,str(i))
             self.errorbox.insert(tk.END,'\n\n')
-        self.errorbox.configure(state=tk.DISABLED)
+        self.errorbox.configure(state=tk.DISABLED)        
 
         self.heater_nb = ttk.Notebook(self.mainframe)
         self.heater_nb.place(x=5, y=250, height=160, width=470)
@@ -850,6 +900,9 @@ Grid-33 Grid-34 Grid-35 Grid-36")
         self.grid_confirm = ttk.Button(self.mainframe, text ="Confirm",style='button.TButton', command=lambda : self.gridconfirm())
         self.grid_confirm.place(height = 58, width = 200, x = 270, y = 182)
 
+        tk.Label(self.mainframe,text='Graph Plotting Selection',font=('fixedsys',10)).place(height=15, width=200,x=270,y=10)
+        tk.Label(self.mainframe,text='Heater Control',font=('fixedsys',10)).place(height=15, width=200,x=270,y=255)
+
     def heaterconfirm(self, ind):
         i = self.heater_nb.index(self.heater_nb.select())
         if ind == 1:
@@ -884,8 +937,8 @@ Grid-33 Grid-34 Grid-35 Grid-36")
 
 class ReceiveData():
     def __init__(self):
-        self.rec_data1_1 = np.array([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]], np.int32)
-        self.rec_data2_1 = np.array([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]], np.int32)
+        self.rec_data1_1 = np.array([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]], np.float32)
+        self.rec_data2_1 = np.array([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]], np.float32)
         self.rec_data1_2 = np.array([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]], np.int32)
         self.rec_data2_2 = np.array([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]], np.int32)
         self.time_ind = 0
@@ -908,7 +961,7 @@ class ReceiveData():
                 if mf.state2 == 1:
                     mf.updategraphs(2,self.datapoints)
                 
-        root.after(100,self.updateAll)
+        root.after(1000,self.updateAll)
             
 # Main Window
 root = tk.Tk()
@@ -934,13 +987,10 @@ mf = MonitorFrame(root)
 
 # ----- Thread initialization ----------------------------------------------------------------------------------------------------------------------------------------------
 
-#thr1 = threading.Thread(target=seriallisten_therm)
-#thr1.start()
+thr1 = threading.Thread(target=seriallisten_therm)
+thr1.start()
 #thr2 = threading.Thread(target=seriallisten_IP)
 #thr2.start()
-thr1 = Process(target=seriallisten_therm)
-thr1.start()
-thr1.join()
 
 root.after(2000,mf.rd.updateAll)
 root.mainloop()
