@@ -29,7 +29,6 @@ except ModuleNotFoundError:
     import tkinter.simpledialog as tkSimpleDialog
     from tkinter.simpledialog import Dialog
     from tkinter.scrolledtext import ScrolledText
-from tkintertable import TableCanvas, TableModel
 
 # Numpy
 import numpy as np
@@ -43,7 +42,6 @@ import serial
 
 # Threading
 import threading
-from multiprocessing import Process, Value, Array
 
 # Sys
 import sys
