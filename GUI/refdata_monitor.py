@@ -92,8 +92,7 @@ b3_rec = False
 heat1 = [0, 0, 0, 0, 0, 0]
 heat2 = [0, 0, 0, 0, 0, 0]
 errorlist = []
-IP_flag = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-                      0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+IP_flag = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 
  # Save current time to errorlist for future references
 errorlist.append(dt.datetime.now())
@@ -132,17 +131,19 @@ except Exception as e:
 
 # ----- Threads ------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-# --- Serial listener (Thermistors system) ---
+# --- Serial listener (Thermistors system & Image Processing System) ---
     # This function continuously waits for incoming serial data to read, and writes to serial communication on a fixed time interval
 
-def seriallisten_therm():
+def seriallisten():
     # Global variable call
     global b1_rec
     global b2_rec
     global b3_rec
     global serial_data1
+    global serial_data2
     global update1
     global errorlist
+    global IP_flag
 
     # Local variable definition
     n = 0
@@ -154,6 +155,13 @@ def seriallisten_therm():
                      0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
     closest_temp_array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
                           0,0,0,0,0,0,0,0,0,0]
+    nonordered_data = [00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,
+                00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0]
+
+    rec_data_status_2 = 0
+    rec_ind_2 = 0
+    rec_data_2 = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
     
         # Constant conversion factors from ADC resistance readings to actual temperatures
     res_to_temp = [190953, 145953, 112440, 87285, 68260, 53762,
@@ -226,7 +234,7 @@ def seriallisten_therm():
                         if int(''.join(data_temp_2)) != 0:
                                 # Convert ADC data to resistance
                             conc_rec_data[i] = round(18000/(3.3/(3.3*int(''.join(data_temp_2))/4095)-1))
-                            serial_data1[i] = 0
+                            nonordered_data[i] = 0
                             if conc_rec_data[i] < 190953:
                                     # Convert resistance values to temperatures, if resistance is within the min and max convertion factors
                                 #closest_temp_array[:] = [abs(conc_rec_data[i]-m) for m in res_to_temp]
@@ -235,61 +243,55 @@ def seriallisten_therm():
                                 #    closest_temp_ind += 1
                                 #resulting_temp = (-40+5*(closest_temp_ind))-5*((conc_rec_data[i]-res_to_temp[closest_temp_ind])/(res_to_temp[closest_temp_ind-1]-res_to_temp[closest_temp_ind]))
                                 resulting_temp = 1/(1/298+1/3435*(math.log(conc_rec_data[i]/10000)))-273
-                                serial_data1[i] = abs(round(resulting_temp,2))
+                                nonordered_data[i] = abs(round(resulting_temp,2))
+                    temp = nonordered_data[16]
+                    nonordered_data[16] = nonordered_data[18]
+                    nonordered_data[18] = temp
+                    temp = nonordered_data[17]
+                    nonordered_data[17] = nonordered_data[19]
+                    nonordered_data[19] = temp
+                        # Manual reordering of data
+                    serial_data1[0:8] = nonordered_data[0:8]
+                    serial_data1[6:14] = nonordered_data[8:16]
+                    serial_data1[12:20] = nonordered_data[16:24]
+                    serial_data1[18:26] = nonordered_data[24:32]
+                    serial_data1[24:32] = nonordered_data[32:40]
 
             except Exception as e:
                 errorlist.append('{}'.format(sys.exc_info()[-1].tb_lineno))
                 errorlist.append(e)
                 errorlist.append('---')
-
-# --- Serial listener (Image Processor system) ---
-    # This function continuously waits for incoming serial data to read
-    
-def seriallisten_IP():
-    # Global variable call
-    global serial_data2
-    global update2
-    global errorlist
-    global IP_flag
-
-    # Local variable definition
-    rec_data_status = 0
-    rec_ind = 0
-    rec_data = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-                0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
-    
-    while 1:
+                
         if serial2.isOpen() == True:
             try:
-                ini_input1 = ''
+                ini_input2 = ''
                     # If incoming serial data buffer full, decode serial data and save
                 if serial2.inWaiting() > 0:
-                    ini_input1_raw = serial1.readline()
-                    ini_input1 = ini_input1_raw.decode('utf-8')
+                    ini_input2_raw = serial2.readline()
+                    ini_input2 = ini_input2_raw.decode('utf-8')
 
                     # if received, indicates that next 36 serial data inputs will be IP data
-                if ini_input1 == 'begin\n':
-                    rec_data_status = 1
-                    rec_ind = 0
+                if ini_input2 == 'begin\n':
+                    rec_data_status_2 = 1
+                    rec_ind_2 = 0
 
                     # if currently in the process of receiving IP data, save data to specific array, then increment array
-                if rec_data_status == 1 and ini_input1 != 'end\n' and ini_input1 != '':
-                    rec_data[rec_ind] = ini_input1
-                    rec_ind += 1
+                if rec_data_status_2 == 1 and ini_input2 != 'end\n' and ini_input2 != '' and ini_input2 != 'begin\n':
+                    rec_data_2[rec_ind_2] = ini_input2
+                    rec_ind_2 += 1
 
                     # if received, indicates that IP data finished transfering, can proceed to transform into useful temperature data
                     # format of inputs FSTTTT\n, where F is flag (normal, too hot, too cold), S is sign of temperature, T is temperature
-                elif ini_input1 == 'end\n':
-                    rec_data_status = 0
+                elif ini_input2 == 'end\n':
+                    rec_data_status_2 = 0
                     for i in range(0,36): # For each data point
-                        data_temp = rec_data[i]
-                        IP_flag[i] = data_temp[0] # Sets correct flag in global variables
-                        if data_temp[1] == 0:
+                        data_temp = str(rec_data_2[i])
+                        IP_flag[i] = int(data_temp[0]) # Sets correct flag in global variables
+                        if int(data_temp[2]) == 0:
                             sign = 1
                         else:
                             sign = -1
-                        serial_data2[i] = sign*(int(data_temp[2:(len(data_temp)-1)])/100) # Sets correct temperature in global variables
-                    update2 = 1
+                        serial_data2[i] = sign*(float(data_temp[4:(len(data_temp)-1)])) # Sets correct temperature in global variables
 
             except Exception as e:
                 errorlist.append('{}'.format(sys.exc_info()[-1].tb_lineno))
@@ -303,19 +305,26 @@ def seriallisten_IP():
     # Main GUI window, handles graphs, controls, table, save options
 class MonitorFrame():
     def __init__(self,parent):
+            # Create main window frame
         self.mainframe = ttk.Frame(parent, style = 'main.TFrame' )
         self.mainframe.place(height=850, width=1500, x=50, y=25)
-        
+
+            # Create graph subframes
         self.graph1 = ttk.Frame(self.mainframe,style = 'graph.TFrame')
-        self.graph1.place(height=400, width=712, x=25, y=10)
+        self.graph1.place(height=400, width=650, x=25, y=10)
         self.graph2 = ttk.Frame(self.mainframe,style = 'graph.TFrame')
-        self.graph2.place(height=400, width=715, x=763, y=10)
-        
+        self.graph2.place(height=400, width=650, x=825, y=10)
+        self.LEDframe = ttk.Frame(self.mainframe,style = 'controls.TFrame')
+        self.LEDframe.place(height=400, width=140, x=680, y=10)
+        self.initialize_LEDs()
+
+            # Create table and initialize values
         self.initialize_table()
-        
+
+            # Create controls subframe
         self.controls = ttk.Frame(self.mainframe,style = 'controls.TFrame')
         self.controls.place(height=285, width=1450, x=25, y=555)
-        
+                # Create serial toggle data
         self.onoff_data1 = ttk.Button(self.controls, text = 'Toggle Ref Data', style = 'button.TButton',command=lambda : self.togglegraph(1))
         self.onoff_data2 = ttk.Button(self.controls, text = 'Toggle IP Data', style = 'button.TButton',command=lambda : self.togglegraph(2))
         self.onoff_data1.place(height=127,width=200,x=25,y=10)
@@ -447,13 +456,93 @@ class MonitorFrame():
             errorlist.append(e)
             errorlist.append('---')
 
+    def initialize_LEDs(self):
+        self.LED_hot = [0,0,0,0,0,0]
+        self.LED_hot[0] = ttk.Frame(self.LEDframe, style = 'disabled.TFrame')
+        self.LED_hot[0].place(height=30,width = 60, x = 75, y=39)
+        self.LED_hot[1] = ttk.Frame(self.LEDframe, style = 'disabled.TFrame')
+        self.LED_hot[1].place(height=30,width = 60, x = 75, y=103)
+        self.LED_hot[2] = ttk.Frame(self.LEDframe, style = 'disabled.TFrame')
+        self.LED_hot[2].place(height=30,width = 60, x = 75, y=167)
+        self.LED_hot[3] = ttk.Frame(self.LEDframe, style = 'disabled.TFrame')
+        self.LED_hot[3].place(height=30,width = 60, x = 75, y=231)
+        self.LED_hot[4] = ttk.Frame(self.LEDframe, style = 'disabled.TFrame')
+        self.LED_hot[4].place(height=30,width = 60, x = 75, y=295)
+        self.LED_hot[5] = ttk.Frame(self.LEDframe, style = 'disabled.TFrame')
+        self.LED_hot[5].place(height=30,width = 60, x = 75, y=359)
+
+        self.LED_cold = [0,0,0,0,0,0]
+        self.LED_cold[0] = ttk.Frame(self.LEDframe, style = 'disabled.TFrame')
+        self.LED_cold[0].place(height=30,width = 60, x = 5, y=39)
+        self.LED_cold[1] = ttk.Frame(self.LEDframe, style = 'disabled.TFrame')
+        self.LED_cold[1].place(height=30,width = 60, x = 5, y=103)
+        self.LED_cold[2] = ttk.Frame(self.LEDframe, style = 'disabled.TFrame')
+        self.LED_cold[2].place(height=30,width = 60, x = 5, y=167)
+        self.LED_cold[3] = ttk.Frame(self.LEDframe, style = 'disabled.TFrame')
+        self.LED_cold[3].place(height=30,width = 60, x = 5, y=231)
+        self.LED_cold[4] = ttk.Frame(self.LEDframe, style = 'disabled.TFrame')
+        self.LED_cold[4].place(height=30,width = 60, x = 5, y=295)
+        self.LED_cold[5] = ttk.Frame(self.LEDframe, style = 'disabled.TFrame')
+        self.LED_cold[5].place(height=30,width = 60, x = 5, y=359)
+
+        tk.Label(self.LEDframe,text='Tray 1',font=('fixedsys',12),background='lightgrey').place(height=20,width = 130, x = 5, y=15)
+        tk.Label(self.LEDframe,text='Tray 2',font=('fixedsys',12),background='lightgrey').place(height=20,width = 130, x = 5, y=79)
+        tk.Label(self.LEDframe,text='Tray 3',font=('fixedsys',12),background='lightgrey').place(height=20,width = 130, x = 5, y=143)
+        tk.Label(self.LEDframe,text='Tray 4',font=('fixedsys',12),background='lightgrey').place(height=20,width = 130, x = 5, y=207)
+        tk.Label(self.LEDframe,text='Tray 5',font=('fixedsys',12),background='lightgrey').place(height=20,width = 130, x = 5, y=271)
+        tk.Label(self.LEDframe,text='Tray 6',font=('fixedsys',12),background='lightgrey').place(height=20,width = 130, x = 5, y=335)
+
+        
+
+    def update_LEDs(self):
+        self.LED_cold[0].configure(style = 'disabled.TFrame')
+        self.LED_hot[0].configure(style = 'disabled.TFrame')
+        for i in range(0,6):
+            if IP_flag[i] == 1:
+                self.LED_cold[0].configure(style = 'toocold.TFrame')
+            if IP_flag[i] == 2:
+                self.LED_hot[0].configure(style = 'toohot.TFrame')
+        self.LED_cold[1].configure(style = 'disabled.TFrame')
+        self.LED_hot[1].configure(style = 'disabled.TFrame')
+        for i in range(6,12):
+            if IP_flag[i] == 1:
+                self.LED_cold[1].configure(style = 'toocold.TFrame')
+            if IP_flag[i] == 2:
+                self.LED_hot[1].configure(style = 'toohot.TFrame')
+        self.LED_cold[2].configure(style = 'disabled.TFrame')
+        self.LED_hot[2].configure(style = 'disabled.TFrame')
+        for i in range(12,18):
+            if IP_flag[i] == 1:
+                self.LED_cold[2].configure(style = 'toocold.TFrame')
+            if IP_flag[i] == 2:
+                self.LED_hot[2].configure(style = 'toohot.TFrame')
+        self.LED_cold[3].configure(style = 'disabled.TFrame')
+        self.LED_hot[3].configure(style = 'disabled.TFrame')
+        for i in range(18,24):
+            if IP_flag[i] == 1:
+                self.LED_cold[3].configure(style = 'toocold.TFrame')
+            if IP_flag[i] == 2:
+                self.LED_hot[3].configure(style = 'toohot.TFrame')
+        self.LED_cold[4].configure(style = 'disabled.TFrame')
+        self.LED_hot[4].configure(style = 'disabled.TFrame')
+        for i in range(24,30):
+            if IP_flag[i] == 1:
+                self.LED_cold[4].configure(style = 'toocold.TFrame')
+            if IP_flag[i] == 2:
+                self.LED_hot[4].configure(style = 'toohot.TFrame')
+        self.LED_cold[5].configure(style = 'disabled.TFrame')
+        self.LED_hot[5].configure(style = 'disabled.TFrame')
+        for i in range(30,36):
+            if IP_flag[i] == 1:
+                self.LED_cold[5].configure(style = 'toocold.TFrame')
+            if IP_flag[i] == 2:
+                self.LED_hot[5].configure(style = 'toohot.TFrame')
+        
     def initialize_table(self):
         try:
             self.datatable.destroy()
         except Exception as e:
-            errorlist.append('{}'.format(sys.exc_info()[-1].tb_lineno))
-            errorlist.append(e)
-            errorlist.append('---')
+            ...
         self.datatable = ttk.Frame(self.mainframe,style = 'table.TFrame')
         self.datatable.place(height=125, width=1450, x=25, y=420)
         self.databox = []
@@ -587,12 +676,12 @@ class MonitorFrame():
 
         self.canvas1 = FigureCanvasTkAgg(self.fig1, self.graph1)
         self.canvas1.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand = True)
-        self.fig1_info.plot([0],[0], 'fuchsia', label='Legend')
+        self.fig1_info.plot([0],[0], 'red', label='Legend')
         self.legend1 = self.fig1_info.legend(loc='upper left', shadow=False, fontsize='large')
         self.legend1.get_frame().set_facecolor('white')
         self.canvas1.draw()
 
-        self.fig2_info.plot(0,0, 'fuchsia', label='Legend')
+        self.fig2_info.plot(0,0, 'red', label='Legend')
         self.legend2 = self.fig2_info.legend(loc='upper left', shadow=False, fontsize='large')
         self.legend2.get_frame().set_facecolor('white')
         self.canvas2 = FigureCanvasTkAgg(self.fig2, self.graph2)
@@ -924,10 +1013,9 @@ Grid-33 Grid-34 Grid-35 Grid-36")
     def send_cmd(self,ind,ind2,temp):
         try:
             if (2*ind+ind2) < 10:
-                output = '0'+str(2*ind+ind2)+str(temp)+'\n'
+                output = '0'+str(2*ind+ind2-1)+ ' ' +str(temp)+'\n'
             else:
-                output = str(2*ind+ind2)+str(temp)+'\n'
-            print(output)
+                output = str(2*ind+ind2-1)+ ' ' +str(temp)+'\n'
             serial3.write(output.encode('ascii'))
         except Exception as e:
             errorlist.append('{}'.format(sys.exc_info()[-1].tb_lineno))
@@ -942,17 +1030,21 @@ class ReceiveData():
         self.rec_data1_2 = np.array([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]], np.int32)
         self.rec_data2_2 = np.array([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]], np.int32)
         self.time_ind = 0
+        self.time_ind_1 = 0
+        self.time_ind_2 = 0
         self.datapoints = [1,2,3,4,5,6]
         
     def updateAll(self):
         if mf.state1 == 1 or mf.state2 == 1:
             mf.update_table()
             if mf.state1 == 1:
-                self.rec_data1_1 = np.insert(self.rec_data1_1, self.time_ind, serial_data1[0:36], axis=1)
-                self.rec_data1_2 = np.insert(self.rec_data1_2, self.time_ind, self.time_ind)
+                self.rec_data1_1 = np.insert(self.rec_data1_1, self.time_ind_1, serial_data1[0:36], axis=1)
+                self.rec_data1_2 = np.insert(self.rec_data1_2, self.time_ind_1, self.time_ind)
+                self.time_ind_1 += 1
             if mf.state2 == 1:
-                self.rec_data2_1 = np.insert(self.rec_data2_1, self.time_ind, serial_data2[0:36], axis=1)
-                self.rec_data2_2 = np.insert(self.rec_data2_2, self.time_ind, self.time_ind)
+                self.rec_data2_1 = np.insert(self.rec_data2_1, self.time_ind_2, serial_data2[0:36], axis=1)
+                self.rec_data2_2 = np.insert(self.rec_data2_2, self.time_ind_2, self.time_ind)
+                self.time_ind_2 += 1
             self.time_ind += 1
             
             if (self.time_ind%5)==0 or self.time_ind==0:
@@ -960,6 +1052,7 @@ class ReceiveData():
                     mf.updategraphs(1,self.datapoints)
                 if mf.state2 == 1:
                     mf.updategraphs(2,self.datapoints)
+                    mf.update_LEDs()
                 
         root.after(1000,self.updateAll)
             
@@ -980,6 +1073,9 @@ s.configure('button.TButton',background = 'darkgrey',relief='raised')
 s.configure('off.TFrame',background='brown2',relief='raised')
 s.configure('on.TFrame',background='green3',relief='raised')
 s.configure('error.TFrame',background='orange',relief='raised')
+s.configure('disabled.TFrame',background='grey63',relief='raised')
+s.configure('toohot.TFrame',background='orangered3',relief='raised')
+s.configure('toocold.TFrame',background='dodgerblue3',relief='raised')
 
 # Frame creations
 mf = MonitorFrame(root)
@@ -987,10 +1083,8 @@ mf = MonitorFrame(root)
 
 # ----- Thread initialization ----------------------------------------------------------------------------------------------------------------------------------------------
 
-thr1 = threading.Thread(target=seriallisten_therm)
+thr1 = threading.Thread(target=seriallisten)
 thr1.start()
-#thr2 = threading.Thread(target=seriallisten_IP)
-#thr2.start()
 
 root.after(2000,mf.rd.updateAll)
 root.mainloop()
