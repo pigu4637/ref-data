@@ -109,7 +109,7 @@ errorlist.append('Port ' + serial1.name + ' used (1).')
     # This serial port is used to input and output to the IP MCU (8-N-9600)
 serial2 = serial.Serial(timeout=1,parity=serial.PARITY_NONE,stopbits=serial.STOPBITS_ONE,bytesize=serial.EIGHTBITS)
 serial2.baudrate = 9600
-serial2.port = 'COM6'
+serial2.port = 'COM9'
 errorlist.append('Port ' + serial2.name + ' used (2).')
 
 # --- Serial3 ---
@@ -154,6 +154,8 @@ def seriallisten():
     closest_temp_array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
                           0,0,0,0,0,0,0,0,0,0]
     nonordered_data = [00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,
+                00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0]
+    ordered_data = [00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,
                 00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0,00.0]
 
     rec_data_status_2 = 0
@@ -241,7 +243,7 @@ def seriallisten():
                                 #    closest_temp_ind += 1
                                 #resulting_temp = (-40+5*(closest_temp_ind))-5*((conc_rec_data[i]-res_to_temp[closest_temp_ind])/(res_to_temp[closest_temp_ind-1]-res_to_temp[closest_temp_ind]))
                                 resulting_temp = 1/(1/298+1/3435*(math.log(conc_rec_data[i]/10000)))-273
-                                nonordered_data[i] = abs(round(resulting_temp,2))
+                                nonordered_data[i] = round(resulting_temp,2)
                     temp = nonordered_data[16]
                     nonordered_data[16] = nonordered_data[18]
                     nonordered_data[18] = temp
@@ -249,11 +251,23 @@ def seriallisten():
                     nonordered_data[17] = nonordered_data[19]
                     nonordered_data[19] = temp
                         # Manual reordering of data
-                    serial_data1[0:8] = nonordered_data[0:8]
-                    serial_data1[6:14] = nonordered_data[8:16]
-                    serial_data1[12:20] = nonordered_data[16:24]
-                    serial_data1[18:26] = nonordered_data[24:32]
-                    serial_data1[24:32] = nonordered_data[32:40]
+                    ordered_data[0:8] = nonordered_data[0:8]
+                    ordered_data[6:14] = nonordered_data[8:16]
+                    ordered_data[12:20] = nonordered_data[16:24]
+                    ordered_data[18:26] = nonordered_data[24:32]
+                    ordered_data[24:32] = nonordered_data[32:40]
+                    for i in range(6):
+                        temp = ordered_data[i*6]
+                        ordered_data[i*6] = ordered_data[i*6+5]
+                        ordered_data[i*6+5] = temp
+                        temp = ordered_data[i*6+1]
+                        ordered_data[i*6+1] = ordered_data[i*6+4]
+                        ordered_data[i*6+4] = temp
+                        temp = ordered_data[i*6+2]
+                        ordered_data[i*6+2] = ordered_data[i*6+3]
+                        ordered_data[i*6+3] = temp
+
+                    serial_data1 = ordered_data
 
             except Exception as e:
                 errorlist.append('{}'.format(sys.exc_info()[-1].tb_lineno))
@@ -289,7 +303,7 @@ def seriallisten():
                             sign = 1
                         else:
                             sign = -1
-                        serial_data2[i] = sign*(float(data_temp[4:(len(data_temp)-1)])) # Sets correct temperature in global variables
+                        serial_data2[i] = sign*(abs(float(data_temp[4:(len(data_temp)-1)]))) # Sets correct temperature in global variables
 
             except Exception as e:
                 errorlist.append('{}'.format(sys.exc_info()[-1].tb_lineno))
@@ -322,7 +336,7 @@ class MonitorFrame():
             # Create controls subframe
         self.controls = ttk.Frame(self.mainframe,style = 'controls.TFrame')
         self.controls.place(height=285, width=1450, x=25, y=555)
-                # Create serial toggle data
+                # Create serial toggle data button
         self.onoff_data1 = ttk.Button(self.controls, text = 'Toggle Ref Data', style = 'button.TButton',command=lambda : self.togglegraph(1))
         self.onoff_data2 = ttk.Button(self.controls, text = 'Toggle IP Data', style = 'button.TButton',command=lambda : self.togglegraph(2))
         self.onoff_data1.place(height=127,width=200,x=25,y=10)
@@ -331,7 +345,7 @@ class MonitorFrame():
         self.data1_status.place(height=127,width = 50, x = 250, y=10)
         self.data2_status = ttk.Frame(self.controls, style = 'off.TFrame')
         self.data2_status.place(height=127,width = 50, x = 250, y=148)
-
+                # Create self test button
         self.state1 = 0
         self.state2 = 0
         self.check1 = ttk.Button(self.controls, text = 'Test connection1', style = 'button.TButton', command=lambda : self.opentest(1))
@@ -348,7 +362,8 @@ class MonitorFrame():
         self.controls.rowconfigure(0, weight=1)
 
         self.save_status = 0
-        self.save_index = 0
+        self.save_index_1 = 0
+        self.save_index_2 = 0
         self.save_file_exists = False
         self.commentbox = tk.Text(self.controls)
         self.commentbox.place(height=195,width=675,x=750,y=10)
@@ -411,7 +426,8 @@ class MonitorFrame():
                 
             if ind == 2:
                 if self.save_status == 0:
-                    self.save_index = self.rd.rec_data1_2[-1]
+                    self.save_index_1 = self.rd.rec_data1_2[-1]
+                    self.save_index_2 = self.rd.rec_data2_2[-1]
                     self.save_status = 1
                     self.savingcont.configure(style = 'on.TFrame')
                 else:
@@ -420,7 +436,7 @@ class MonitorFrame():
 
                     try:
                         self.open_savefile_RD.write('\n'+'# '+self.commentbox.get("1.0",tk.END))
-                        for j in range(self.save_index, self.rd.rec_data1_2[-1]):
+                        for j in range(self.save_index_1, self.rd.rec_data1_2[-1]):
                             to_write = str(self.rd.rec_data1_2[j])
                             for i in range(36):
                                 to_write = to_write + ' ' + str(self.rd.rec_data1_1[i][j])
@@ -429,16 +445,16 @@ class MonitorFrame():
                     except Exception as e:
                         errorlist.append('{}'.format(sys.exc_info()[-1].tb_lineno))
                         errorlist.append(e)
-                        errorlist.append('---')                    
-
+                        errorlist.append('---')
+                        
                     try:
                         self.open_savefile_IP.write('\n'+'# '+self.commentbox.get("1.0",tk.END))
-                        for j in range(self.save_index, self.rd.rec_data2_2[-1]):
+                        for j in range(self.save_index_2, self.rd.rec_data2_2[-1]):
                             to_write = str(self.rd.rec_data2_2[j])
                             for i in range(36):
                                 to_write = to_write + ' ' + str(self.rd.rec_data2_1[i][j])
                             to_write = to_write + '\n'
-                            self.open_savefile_RD.write(to_write)
+                            self.open_savefile_IP.write(to_write)
                     except Exception as e:
                         errorlist.append('{}'.format(sys.exc_info()[-1].tb_lineno))
                         errorlist.append(e)
@@ -490,51 +506,75 @@ class MonitorFrame():
         tk.Label(self.LEDframe,text='Tray 5',font=('fixedsys',12),background='lightgrey').place(height=20,width = 130, x = 5, y=271)
         tk.Label(self.LEDframe,text='Tray 6',font=('fixedsys',12),background='lightgrey').place(height=20,width = 130, x = 5, y=335)
 
-        
+        self.LED_label = [0,0,0,0,0,0,0,0,0,0,0,0]
+        self.LED_label[0] = tk.Label(self.LED_cold[0], text="Heat ON",font=('Loma',10),background='grey63').place(height=20,width = 50, x = 5, y=5)
+        self.LED_label[1] = tk.Label(self.LED_hot[0], text="Tray OFF",font=('Loma',10),background='grey63').place(height=20,width = 50, x = 5, y=5)
+        self.LED_label[2] = tk.Label(self.LED_cold[1], text="Heat ON",font=('Loma',10),background='grey63').place(height=20,width = 50, x = 5, y=5)
+        self.LED_label[3] = tk.Label(self.LED_hot[1], text="Tray OFF",font=('Loma',10),background='grey63').place(height=20,width = 50, x = 5, y=5)
+        self.LED_label[4] = tk.Label(self.LED_cold[2], text="Heat ON",font=('Loma',10),background='grey63').place(height=20,width = 50, x = 5, y=5)
+        self.LED_label[5] = tk.Label(self.LED_hot[2], text="Tray OFF",font=('Loma',10),background='grey63').place(height=20,width = 50, x = 5, y=5)
+        self.LED_label[6] = tk.Label(self.LED_cold[3], text="Heat ON",font=('Loma',10),background='grey63').place(height=20,width = 50, x = 5, y=5)
+        self.LED_label[7] = tk.Label(self.LED_hot[3], text="Tray OFF",font=('Loma',10),background='grey63').place(height=20,width = 50, x = 5, y=5)
+        self.LED_label[8] = tk.Label(self.LED_cold[4], text="Heat ON",font=('Loma',10),background='grey63').place(height=20,width = 50, x = 5, y=5)
+        self.LED_label[9] = tk.Label(self.LED_hot[4], text="Tray OFF",font=('Loma',10),background='grey63').place(height=20,width = 50, x = 5, y=5)
+        self.LED_label[10] = tk.Label(self.LED_cold[5], text="Heat ON",font=('Loma',10),background='grey63').place(height=20,width = 50, x = 5, y=5)
+        self.LED_label[11] = tk.Label(self.LED_hot[5], text="Tray OFF",font=('Loma',10),background='grey63').place(height=20,width = 50, x = 5, y=5)
 
-    def update_LEDs(self):
+    def update_LEDs(self):        
         self.LED_cold[0].configure(style = 'disabled.TFrame')
         self.LED_hot[0].configure(style = 'disabled.TFrame')
         for i in range(0,6):
             if IP_flag[i] == 1:
                 self.LED_cold[0].configure(style = 'toocold.TFrame')
+
             if IP_flag[i] == 2:
                 self.LED_hot[0].configure(style = 'toohot.TFrame')
+                
         self.LED_cold[1].configure(style = 'disabled.TFrame')
         self.LED_hot[1].configure(style = 'disabled.TFrame')
         for i in range(6,12):
             if IP_flag[i] == 1:
                 self.LED_cold[1].configure(style = 'toocold.TFrame')
+                
             if IP_flag[i] == 2:
                 self.LED_hot[1].configure(style = 'toohot.TFrame')
+                
         self.LED_cold[2].configure(style = 'disabled.TFrame')
         self.LED_hot[2].configure(style = 'disabled.TFrame')
         for i in range(12,18):
             if IP_flag[i] == 1:
                 self.LED_cold[2].configure(style = 'toocold.TFrame')
+                
             if IP_flag[i] == 2:
                 self.LED_hot[2].configure(style = 'toohot.TFrame')
+                
         self.LED_cold[3].configure(style = 'disabled.TFrame')
         self.LED_hot[3].configure(style = 'disabled.TFrame')
         for i in range(18,24):
             if IP_flag[i] == 1:
                 self.LED_cold[3].configure(style = 'toocold.TFrame')
+                
             if IP_flag[i] == 2:
                 self.LED_hot[3].configure(style = 'toohot.TFrame')
+                
         self.LED_cold[4].configure(style = 'disabled.TFrame')
         self.LED_hot[4].configure(style = 'disabled.TFrame')
         for i in range(24,30):
             if IP_flag[i] == 1:
                 self.LED_cold[4].configure(style = 'toocold.TFrame')
+                
             if IP_flag[i] == 2:
                 self.LED_hot[4].configure(style = 'toohot.TFrame')
+                
         self.LED_cold[5].configure(style = 'disabled.TFrame')
         self.LED_hot[5].configure(style = 'disabled.TFrame')
         for i in range(30,36):
             if IP_flag[i] == 1:
                 self.LED_cold[5].configure(style = 'toocold.TFrame')
+                
             if IP_flag[i] == 2:
                 self.LED_hot[5].configure(style = 'toohot.TFrame')
+                
         
     def initialize_table(self):
         try:
@@ -717,7 +757,7 @@ class MonitorFrame():
 class TestFrame():
     def __init__(self,parent,ind):
         self.par = parent
-        self.mainframe = ttk.Frame(parent, style = 'second.TFrame' )
+        self.mainframe = ttk.Frame(parent, style = 'second.TFrame')
         self.mainframe.place(height=310, width=280, x=10, y=10)
         self.refreshbutton = ttk.Button(parent,style='button.TButton', text='Run Test', state = tk.DISABLED, command=lambda : self.runtest(ind))
         self.refreshbutton.place(height=60,width = 280,y=330,x=10)
@@ -841,10 +881,10 @@ class TestFrame():
             partial = 0
             all_temp = 1
             if ind == 1:
-                if sum(serial_data1) == 0:
+                if sum(serial_data1[0:32]) == 0:
                     all_temp = 0
                 else:
-                    for i in serial_data1[0:36]:
+                    for i in serial_data1[0:32]:
                         if i != 0:
                             partial = 1
                         else:
@@ -946,7 +986,7 @@ class LogFrame():
         self.errorbox.configure(state=tk.DISABLED)        
 
         self.heater_nb = ttk.Notebook(self.mainframe)
-        self.heater_nb.place(x=5, y=250, height=160, width=470)
+        self.heater_nb.place(x=5, y=250, height=160, width=390)
         self.heater_frame = [0, 0, 0, 0 ,0 ,0]
         self.heater1_slider = [0, 0, 0, 0, 0 ,0]
         self.heater2_slider = [0, 0, 0, 0, 0 ,0]
@@ -962,12 +1002,12 @@ class LogFrame():
             self.heater1_slider[i].place(height= 58, width=240, x=5,y=5)
             self.heater1_slider[i].set(heat1[i])
             self.confirm1[i] = ttk.Button(self.heater_frame[i], text ="Confirm (Heater 1)",style='button.TButton', command=lambda : self.heaterconfirm(1))
-            self.confirm1[i].place(height = 58, width = 200, x = 260, y = 5)
+            self.confirm1[i].place(height = 58, width = 120, x = 260, y = 5)
             self.heater2_slider[i] = tk.Scale(self.heater_frame[i], from_=0, to=100,orient=tk.HORIZONTAL)
             self.heater2_slider[i].place(height= 58, width=240, x=5,y=68)
             self.heater2_slider[i].set(heat2[i])
             self.confirm2[i] = ttk.Button(self.heater_frame[i], text ="Confirm (Heater 2)",style='button.TButton', command=lambda : self.heaterconfirm(2))
-            self.confirm2[i].place(height = 58, width = 200, x = 260, y = 68)
+            self.confirm2[i].place(height = 58, width = 120, x = 260, y = 68)
 
         self.heater_nb.select(self.heater_frame[0])
         self.heater_nb.enable_traversal()
@@ -988,7 +1028,8 @@ Grid-33 Grid-34 Grid-35 Grid-36")
         self.grid_confirm.place(height = 58, width = 200, x = 270, y = 182)
 
         tk.Label(self.mainframe,text='Graph Plotting Selection',font=('fixedsys',10)).place(height=15, width=200,x=270,y=10)
-        tk.Label(self.mainframe,text='Heater Control',font=('fixedsys',10)).place(height=15, width=200,x=270,y=255)
+        tk.Label(self.mainframe,text='Heater Control',font=('fixedsys',10)).place(height=15, width=120,x=270,y=255)
+        self.shutoff = ttk.Button(self.mainframe,text='Shut Off All',style = 'redbutton.TButton',command=lambda : self.shutoffall()).place(height=150, width=70,x=400,y=255)
 
     def heaterconfirm(self, ind):
         i = self.heater_nb.index(self.heater_nb.select())
@@ -1006,7 +1047,18 @@ Grid-33 Grid-34 Grid-35 Grid-36")
         for i in grid_selection:
             curr_string = self.grid_select.get(i)
             mf.rd.datapoints.append(int(curr_string[5:8]))
-        print(mf.rd.datapoints)
+
+    def shutoffall(self):
+        for i in range(12):
+            if (i) < 10:
+                output = '0'+str(i)+ ' ' +'0'+'\n'
+            else:
+                output = str(i)+ ' ' +'0'+'\n'
+            time.sleep(0.001)
+            serial3.write(output.encode('ascii'))
+        for i in range(6):
+            heat1[i] = 0
+            heat2[i] = 0
 
     def send_cmd(self,ind,ind2,temp):
         try:
@@ -1068,17 +1120,18 @@ s.configure('graph.TFrame',background = 'lightgrey',relief='sunken')
 s.configure('table.TFrame')
 s.configure('controls.TFrame',background = 'lightgrey')
 s.configure('button.TButton',background = 'darkgrey',relief='raised')
+s.configure('redbutton.TButton',background = 'red',foreground='red',relief='raised')
 s.configure('off.TFrame',background='brown2',relief='raised')
 s.configure('on.TFrame',background='green3',relief='raised')
 s.configure('error.TFrame',background='orange',relief='raised')
 s.configure('disabled.TFrame',background='grey63',relief='raised')
-s.configure('toohot.TFrame',background='orangered3',relief='raised')
-s.configure('toocold.TFrame',background='dodgerblue3',relief='raised')
+s.configure('toohot.TFrame',background='dodgerblue3',relief='raised')
+s.configure('toocold.TFrame',background='orangered3',relief='raised')
 
 # Frame creations
 mf = MonitorFrame(root)
 
-
+mf.update_LEDs()
 # ----- Thread initialization ----------------------------------------------------------------------------------------------------------------------------------------------
 
 thr1 = threading.Thread(target=seriallisten)
